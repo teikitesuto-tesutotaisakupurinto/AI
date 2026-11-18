@@ -1,12 +1,10 @@
-import express from "express";
-import crypto from "crypto";
+const express = require("express");
+const crypto = require("crypto");
 
 const app = express();
 
 const PORT = process.env.PORT || 3000;
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
-
-// Renderの環境変数で変更可能
 const GROQ_MODEL =
   process.env.GROQ_MODEL ||
   "meta-llama/llama-4-scout-17b-16e-instruct";
@@ -310,7 +308,7 @@ button{
 }
 
 /* =========================
-   POYO POYO
+   ぽわぽわ
 ========================= */
 
 .typing{
@@ -433,7 +431,7 @@ button{
 
 .crop-title{
   font-size:18px;
-  margin:0 0:12px;
+  margin:0 0 12px;
 }
 
 .crop-stage{
@@ -492,10 +490,6 @@ button{
 
 <body>
 
-<!-- =====================================================
-     START
-===================================================== -->
-
 <section id="start" class="screen active">
 
   <div class="start-box">
@@ -524,10 +518,6 @@ button{
 
 </section>
 
-
-<!-- =====================================================
-     SUBJECT
-===================================================== -->
 
 <section id="subjects" class="screen">
 
@@ -583,10 +573,6 @@ button{
 </section>
 
 
-<!-- =====================================================
-     CHAT
-===================================================== -->
-
 <section id="chat" class="screen">
 
   <header class="chat-header">
@@ -612,8 +598,6 @@ button{
 
   </header>
 
-
-  <!-- 写真添付：上 -->
 
   <div class="attach-area">
 
@@ -670,8 +654,6 @@ button{
   </div>
 
 
-  <!-- チャット -->
-
   <div
     class="chat-body"
     id="chatBody">
@@ -683,8 +665,6 @@ button{
 
   </div>
 
-
-  <!-- 質問入力：下 -->
 
   <div class="composer">
 
@@ -706,10 +686,6 @@ button{
 
 </section>
 
-
-<!-- =====================================================
-     CROP
-===================================================== -->
 
 <div id="cropModal">
 
@@ -748,10 +724,6 @@ button{
 
 <script>
 
-/* =========================================================
-   状態
-========================================================= */
-
 const state = {
 
   mode: null,
@@ -770,10 +742,6 @@ const state = {
 
 };
 
-
-/* =========================================================
-   要素
-========================================================= */
 
 const start =
   document.getElementById("start");
@@ -821,10 +789,6 @@ const cropCanvas =
   document.getElementById("cropCanvas");
 
 
-/* =========================================================
-   画面
-========================================================= */
-
 function showScreen(screen){
 
   document
@@ -837,10 +801,6 @@ function showScreen(screen){
 
 }
 
-
-/* =========================================================
-   添削 / 質問
-========================================================= */
 
 document
   .querySelectorAll("[data-mode]")
@@ -860,10 +820,6 @@ document
 
   });
 
-
-/* =========================================================
-   戻る
-========================================================= */
 
 document
   .getElementById("subjectBack")
@@ -886,10 +842,6 @@ document
 
   };
 
-
-/* =========================================================
-   教科
-========================================================= */
 
 document
   .querySelectorAll("[data-subject]")
@@ -934,10 +886,6 @@ document
   });
 
 
-/* =========================================================
-   メッセージ
-========================================================= */
-
 function addMessage(text,type){
 
   const row =
@@ -945,7 +893,6 @@ function addMessage(text,type){
 
   row.className =
     "message " + type;
-
 
   const bubble =
     document.createElement("div");
@@ -955,7 +902,6 @@ function addMessage(text,type){
 
   bubble.textContent =
     text;
-
 
   row.appendChild(bubble);
 
@@ -996,13 +942,11 @@ function showThinking(){
   row.className =
     "message ai";
 
-
   const bubble =
     document.createElement("div");
 
   bubble.className =
     "bubble typing";
-
 
   for(let i=0;i<3;i++){
 
@@ -1015,7 +959,6 @@ function showThinking(){
     bubble.appendChild(dot);
 
   }
-
 
   row.appendChild(bubble);
 
@@ -1098,10 +1041,6 @@ let dragStart =
   null;
 
 
-/* =========================================================
-   画像選択
-========================================================= */
-
 function handleImage(file){
 
   if(!file){
@@ -1109,7 +1048,6 @@ function handleImage(file){
     return;
 
   }
-
 
   if(!file.type.startsWith("image/")){
 
@@ -1121,10 +1059,8 @@ function handleImage(file){
 
   }
 
-
   const reader =
     new FileReader();
-
 
   reader.onload=()=>{
 
@@ -1134,19 +1070,16 @@ function handleImage(file){
     cropImage =
       new Image();
 
-
     cropImage.onload=()=>{
 
       openCrop();
 
     };
 
-
     cropImage.src =
       cropSource;
 
   };
-
 
   reader.readAsDataURL(file);
 
@@ -1154,7 +1087,7 @@ function handleImage(file){
 
 
 /* =========================================================
-   簡易トリミング
+   画像切り取り
 ========================================================= */
 
 function openCrop(){
@@ -1180,18 +1113,15 @@ function setupCropCanvas(){
       520
     );
 
-
   const ratio =
     cropImage.naturalWidth /
     cropImage.naturalHeight;
-
 
   let w =
     maxW;
 
   let h =
     w / ratio;
-
 
   if(h > maxH){
 
@@ -1203,13 +1133,11 @@ function setupCropCanvas(){
 
   }
 
-
   cropCanvas.width =
     Math.round(w);
 
   cropCanvas.height =
     Math.round(h);
-
 
   cropRect = {
 
@@ -1222,7 +1150,6 @@ function setupCropCanvas(){
     height: h * .84
 
   };
-
 
   drawCrop();
 
@@ -1240,14 +1167,12 @@ function drawCrop(){
   const h =
     cropCanvas.height;
 
-
   ctx.clearRect(
     0,
     0,
     w,
     h
   );
-
 
   ctx.drawImage(
     cropImage,
@@ -1257,12 +1182,8 @@ function drawCrop(){
     h
   );
 
-
-  /* 暗い外側 */
-
   ctx.fillStyle =
     "rgba(0,0,0,.48)";
-
 
   ctx.beginPath();
 
@@ -1273,7 +1194,6 @@ function drawCrop(){
     h
   );
 
-
   ctx.rect(
     cropRect.x,
     cropRect.y,
@@ -1281,13 +1201,9 @@ function drawCrop(){
     cropRect.height
   );
 
-
   ctx.fill(
     "evenodd"
   );
-
-
-  /* 枠 */
 
   ctx.strokeStyle =
     "#fff";
@@ -1306,7 +1222,7 @@ function drawCrop(){
 
 
 /* =========================================================
-   トリミング操作
+   切り取り移動
 ========================================================= */
 
 function pointerPosition(event){
@@ -1314,32 +1230,23 @@ function pointerPosition(event){
   const rect =
     cropCanvas.getBoundingClientRect();
 
-
   const scaleX =
     cropCanvas.width /
     rect.width;
-
 
   const scaleY =
     cropCanvas.height /
     rect.height;
 
-
-  const point =
-    event.touches
-      ? event.touches[0]
-      : event;
-
-
   return {
 
     x:
-      (point.clientX -
+      (event.clientX -
        rect.left) *
       scaleX,
 
     y:
-      (point.clientY -
+      (event.clientY -
        rect.top) *
       scaleY
 
@@ -1354,7 +1261,6 @@ cropCanvas.addEventListener(
 
     const p =
       pointerPosition(event);
-
 
     if(
       p.x >= cropRect.x &&
@@ -1397,20 +1303,16 @@ cropCanvas.addEventListener(
 
     }
 
-
     const p =
       pointerPosition(event);
-
 
     let x =
       p.x -
       dragStart.x;
 
-
     let y =
       p.y -
       dragStart.y;
-
 
     x =
       Math.max(
@@ -1422,7 +1324,6 @@ cropCanvas.addEventListener(
         )
       );
 
-
     y =
       Math.max(
         0,
@@ -1433,13 +1334,11 @@ cropCanvas.addEventListener(
         )
       );
 
-
     cropRect.x =
       x;
 
     cropRect.y =
       y;
-
 
     drawCrop();
 
@@ -1466,23 +1365,19 @@ document
     const output =
       document.createElement("canvas");
 
-
     const sourceW =
       cropImage.naturalWidth;
 
     const sourceH =
       cropImage.naturalHeight;
 
-
     const scaleX =
       sourceW /
       cropCanvas.width;
 
-
     const scaleY =
       sourceH /
       cropCanvas.height;
-
 
     output.width =
       Math.min(
@@ -1493,7 +1388,6 @@ document
         )
       );
 
-
     output.height =
       Math.min(
         1600,
@@ -1503,10 +1397,8 @@ document
         )
       );
 
-
     const ctx =
       output.getContext("2d");
-
 
     ctx.drawImage(
 
@@ -1530,43 +1422,34 @@ document
 
     );
 
-
     state.imageData =
       output.toDataURL(
         "image/jpeg",
         .82
       );
 
-
     previewImage.src =
       state.imageData;
 
-
-    document
-      .getElementById("photoPreview")
-      .classList.add("show");
-
+    photoPreview.classList.add(
+      "show"
+    );
 
     cropModal.classList.remove(
       "show"
     );
 
-
     cropSource = null;
 
-
     /*
-     * 質問入力は絶対に変更しない。
+     * 質問入力欄は変更しない。
+     * 写真操作前に入力していた文章を保持。
      */
 
     input.focus();
 
   };
 
-
-/* =========================================================
-   切り取りキャンセル
-========================================================= */
 
 document
   .getElementById("cropCancel")
@@ -1580,10 +1463,6 @@ document
 
   };
 
-
-/* =========================================================
-   写真削除
-========================================================= */
 
 document
   .getElementById("removePhoto")
@@ -1599,9 +1478,9 @@ function clearPhoto(){
     "src"
   );
 
-  document
-    .getElementById("photoPreview")
-    .classList.remove("show");
+  photoPreview.classList.remove(
+    "show"
+  );
 
   cameraInput.value = "";
 
@@ -1645,10 +1524,8 @@ async function sendMessage(){
 
   }
 
-
   const text =
     input.value.trim();
-
 
   if(
     !text &&
@@ -1659,10 +1536,8 @@ async function sendMessage(){
 
   }
 
-
   let display =
     text;
-
 
   if(state.imageData){
 
@@ -1680,16 +1555,7 @@ async function sendMessage(){
 
   }
 
-
   addUser(display);
-
-
-  /*
-   * 会話をブラウザのメモリに一時保持。
-   *
-   * localStorageには保存しない。
-   * sessionStorageにも保存しない。
-   */
 
   state.messages.push({
 
@@ -1701,18 +1567,19 @@ async function sendMessage(){
 
   });
 
+  /*
+   * 質問入力は送信後に空にする。
+   * 写真選択・切り取りの途中では消さない。
+   */
 
   input.value = "";
-
 
   state.waiting = true;
 
   send.disabled = true;
 
-
   const thinking =
     showThinking();
-
 
   try{
 
@@ -1768,7 +1635,6 @@ async function sendMessage(){
 
     thinking.remove();
 
-
     addAI(
       data.answer
     );
@@ -1784,11 +1650,6 @@ async function sendMessage(){
     });
 
 
-    /*
-     * 回答IDは一時保持。
-     * 永続保存しない。
-     */
-
     if(data.id){
 
       state.answerIds.push(
@@ -1799,13 +1660,7 @@ async function sendMessage(){
 
 
     /*
-     * 最低3段階
-     *
-     * 1 = ヒント
-     * 2 = 解説
-     * 3 = 答え
-     *
-     * 3の後は練習問題フェーズ。
+     * STEP 1 → STEP 2 → STEP 3
      */
 
     if(state.step < 3){
@@ -1815,13 +1670,6 @@ async function sendMessage(){
     }
 
 
-    /*
-     * AIへの送信が終わったら
-     * 添付画像だけ解除。
-     *
-     * 質問入力はすでに送信済み。
-     */
-
     clearPhoto();
 
 
@@ -1830,7 +1678,6 @@ async function sendMessage(){
     console.error(error);
 
     thinking.remove();
-
 
     addAI(
       "ごめん、うまくつながらなかったみたい。\\nもう一度送ってみて。"
@@ -1852,7 +1699,7 @@ async function sendMessage(){
 
 
 /* =========================================================
-   セッションリセット
+   セッション
 ========================================================= */
 
 function resetSession(){
@@ -1880,13 +1727,6 @@ function resetSession(){
 }
 
 
-/*
- * ページを閉じたら、
- * JavaScriptメモリ上のセッションも終了。
- *
- * localStorage等には一切保存していない。
- */
-
 window.addEventListener(
   "pagehide",
   resetSession
@@ -1903,94 +1743,79 @@ window.addEventListener(
 ========================================================= */
 
 const SYSTEM_PROMPT = `
-あなたは「AI学習チャット」の中学生向けAI先生です。
+あなたは中学生向けの「AI学習チャット」の先生です。
 
-【基本方針】
-・中学生が自然に話せる、やさしく落ち着いた話し方。
+【話し方】
+・中学生に自然に伝わる言葉を使う。
+・優しいが、子ども扱いしない。
 ・上から目線にしない。
-・子ども扱いしない。
-・「こんなの簡単」「なんで分からないの」などは禁止。
-・説明を長くしすぎない。
-・間違いを責めない。
-・生徒が分からなければ、別の言い方に変える。
-・生徒が理解できる速度に合わせる。
+・「こんなの簡単」「なんで分からない」などと言わない。
+・「うざい」と感じるような過剰な褒め方をしない。
+・短く分かりやすく説明する。
+・生徒が間違えても責めない。
+・生徒が分からなければ別の説明方法に変える。
 
-【重要：段階指導】
-問題を最初から全部解説してはいけません。
+【最重要：最低3段階】
+一つの回答でヒント・解説・答えを全部出してはいけません。
 
-基本は最低3回に分けます。
-
-STEP 1
+STEP 1：
 ヒントだけ。
 答えを出さない。
-生徒が自分で考えられるようにする。
+生徒自身に考えさせる。
 
-STEP 2
+STEP 2：
 解説。
 STEP1より具体的に説明する。
-途中式や考え方を示してよい。
+必要なら途中式や考え方を示す。
 ただし最終的な答えはまだ出さない。
 
-STEP 3
+STEP 3：
 答え。
-正しい答えと、どうしてそうなるのかを整理する。
+正しい答えと、考え方を整理する。
 
-STEP3まで、1回の返答でまとめて出してはいけません。
+現在指定されているSTEPだけを返してください。
 
 【STEP3の後】
-必ず同じ内容を使った練習問題を1問出してください。
+練習問題を1問出してください。
 
 【練習問題】
 生徒が回答したら理解度を確認してください。
 
-正解なら、
-・短く正解を伝える
-・理解できたことを確認
-・必要なら次の少し難しい問題へ
+正解：
+短く正解を伝えて、理解できたことを確認してください。
 
-不正解または理解不足なら、
+不正解・理解不足：
 1. 要点をもう一度説明
 2. 確認テストを出す
 3. 再挑戦させる
 
 確認テストでも分からなければ、さらに簡単な説明に変えてください。
 
-【添削モード】
-写真が答案・ノート・作文などの場合、
-・合っているところ
-・間違っているところ
-・直すポイント
-を確認してください。
-
-ただし最初から答えを全部出さず、
-まずヒントから始めてください。
+【添削】
+答案・ノート・作文などの画像を確認してください。
+良いところ、間違い、直すポイントを確認します。
+ただし最初から全部答えを出さず、段階的に進めます。
 
 【画像】
-画像が添付されている場合は、画像の内容をよく確認してください。
+画像がある場合は画像の内容を確認してください。
 数学の問題、答案、英作文、国語の記述などを読み取ってください。
-読めない部分は勝手に推測しないでください。
-
-【重要】
-今回の返答だけで全部説明しないでください。
-現在のSTEPだけを返してください。
+読めない部分は推測しないでください。
 `;
 
 
 /* =========================================================
-   API
+   GROQ API
 ========================================================= */
 
-app.post("/api/chat", async (req,res)=>{
+app.post("/api/chat", async (req, res) => {
 
-  try{
+  try {
 
-    if(!GROQ_API_KEY){
+    if (!GROQ_API_KEY) {
 
       return res.status(500).json({
-
         error:
-          "GROQ_API_KEY がRenderに設定されていません。"
-
+          "GROQ_API_KEY がRenderのEnvironment Variablesに設定されていません。"
       });
 
     }
@@ -2002,53 +1827,38 @@ app.post("/api/chat", async (req,res)=>{
       step,
       messages,
       imageData
-    } = req.body;
+    } = req.body || {};
 
 
-    const allowedSubjects =
-      [
-        "国語",
-        "数学",
-        "社会",
-        "理科",
-        "英語"
-      ];
+    const subjects = [
+      "国語",
+      "数学",
+      "社会",
+      "理科",
+      "英語"
+    ];
 
 
-    if(
-      !allowedSubjects.includes(
-        subject
-      )
-    ){
+    if (!subjects.includes(subject)) {
 
       return res.status(400).json({
-
-        error:"教科が正しくありません。"
-
+        error: "教科が正しくありません。"
       });
 
     }
 
 
-    if(
+    if (
       mode !== "質問" &&
       mode !== "添削"
-    ){
+    ) {
 
       return res.status(400).json({
-
-        error:"モードが正しくありません。"
-
+        error: "モードが正しくありません。"
       });
 
     }
 
-
-    /*
-     * ブラウザから受け取った会話。
-     *
-     * 永続保存しない。
-     */
 
     const history =
       Array.isArray(messages)
@@ -2056,41 +1866,39 @@ app.post("/api/chat", async (req,res)=>{
         : [];
 
 
+    const currentStep =
+      Number(step) === 2
+        ? "STEP 2：解説"
+        : Number(step) >= 3
+          ? "STEP 3：答え・その後は練習問題"
+          : "STEP 1：ヒント";
+
+
     const groqMessages = [
 
       {
-
-        role:"system",
-
+        role: "system",
         content:
           SYSTEM_PROMPT +
-          "\\n\\n現在の教科：" +
+          "\n\n現在の教科：" +
           subject +
-          "\\n現在のモード：" +
+          "\n現在のモード：" +
           mode +
-          "\\n現在の段階：" +
-          (
-            Number(step) <= 1
-              ? "STEP 1：ヒント"
-              : Number(step) === 2
-                ? "STEP 2：解説"
-                : "STEP 3：答え・その後は練習問題"
-          )
-
+          "\n現在の段階：" +
+          currentStep
       }
 
     ];
 
 
-    for(
-      const message
-      of history
-    ){
+    for (
+      const message of history
+    ) {
 
-      if(
+      if (
         !message ||
         !message.content
-      ){
+      ) {
 
         continue;
 
@@ -2119,26 +1927,25 @@ app.post("/api/chat", async (req,res)=>{
 
     /*
      * 画像がある場合、
-     * 最後のuserメッセージを
-     * Vision形式に変更。
+     * 最後のuserメッセージへ画像を追加。
      */
 
-    if(
+    if (
       imageData &&
       typeof imageData === "string" &&
       imageData.startsWith("data:image/")
-    ){
+    ) {
 
-      for(
+      for (
         let i =
           groqMessages.length - 1;
         i >= 0;
         i--
-      ){
+      ) {
 
-        if(
+        if (
           groqMessages[i].role === "user"
-        ){
+        ) {
 
           const text =
             groqMessages[i].content;
@@ -2147,29 +1954,20 @@ app.post("/api/chat", async (req,res)=>{
           groqMessages[i].content = [
 
             {
-
-              type:"text",
-
+              type: "text",
               text:
                 text ||
                 "この画像を確認してください。"
-
             },
 
             {
-
-              type:"image_url",
-
-              image_url:{
-
-                url:imageData
-
+              type: "image_url",
+              image_url: {
+                url: imageData
               }
-
             }
 
           ];
-
 
           break;
 
@@ -2180,22 +1978,17 @@ app.post("/api/chat", async (req,res)=>{
     }
 
 
-    /*
-     * Groq
-     */
-
     const groqResponse =
       await fetch(
         "https://api.groq.com/openai/v1/chat/completions",
         {
 
-          method:"POST",
+          method: "POST",
 
-          headers:{
+          headers: {
 
             "Authorization":
-              "Bearer " +
-              GROQ_API_KEY,
+              `Bearer ${GROQ_API_KEY}`,
 
             "Content-Type":
               "application/json"
@@ -2227,10 +2020,10 @@ app.post("/api/chat", async (req,res)=>{
       await groqResponse.json();
 
 
-    if(!groqResponse.ok){
+    if (!groqResponse.ok) {
 
       console.error(
-        "Groq error:",
+        "Groq API error:",
         data
       );
 
@@ -2249,22 +2042,9 @@ app.post("/api/chat", async (req,res)=>{
 
 
     const answer =
-      data
-        ?.choices?.[0]
-        ?.message
-        ?.content ||
-      "うまく回答を作れませんでした。";
+      data?.choices?.[0]?.message?.content ||
+      "回答を取得できませんでした。";
 
-
-    /*
-     * 回答ID。
-     *
-     * GroqのIDそのものを
-     * 永続保存するわけではない。
-     *
-     * 今回の学習セッションで
-     * 参照するためのID。
-     */
 
     const answerId =
       data.id ||
@@ -2282,9 +2062,10 @@ app.post("/api/chat", async (req,res)=>{
     });
 
 
-  }catch(error){
+  } catch (error) {
 
     console.error(
+      "Server error:",
       error
     );
 
@@ -2302,10 +2083,15 @@ app.post("/api/chat", async (req,res)=>{
 
 
 /* =========================================================
-   HTML配信
+   HTML
 ========================================================= */
 
-app.get("*", (req,res)=>{
+/*
+ * Express 5では app.get("*") を使わない。
+ * これで今回の PathError を回避。
+ */
+
+app.use((req, res) => {
 
   res.type("html");
 
@@ -2320,16 +2106,14 @@ app.get("*", (req,res)=>{
 
 app.listen(
   PORT,
-  ()=>{
+  () => {
 
     console.log(
-      "AI学習チャット running on port " +
-      PORT
+      `AI学習チャット running on port ${PORT}`
     );
 
     console.log(
-      "Groq model: " +
-      GROQ_MODEL
+      `Groq model: ${GROQ_MODEL}`
     );
 
   }
