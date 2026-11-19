@@ -55,7 +55,7 @@ let modelCacheTime = 0;
 
 
 /* =========================================================
-   Groqモデル一覧取得
+   Groqモデル一覧
 ========================================================= */
 
 async function getGroqModels() {
@@ -68,9 +68,7 @@ async function getGroqModels() {
 
   }
 
-
   const now = Date.now();
-
 
   if (
     modelCache &&
@@ -80,7 +78,6 @@ async function getGroqModels() {
     return modelCache;
 
   }
-
 
   const response = await fetch(
     "https://api.groq.com/openai/v1/models",
@@ -94,13 +91,10 @@ async function getGroqModels() {
     }
   );
 
-
   const raw =
     await response.text();
 
-
   let data;
-
 
   try {
 
@@ -116,7 +110,6 @@ async function getGroqModels() {
 
   }
 
-
   if (!response.ok) {
 
     throw new Error(
@@ -126,16 +119,13 @@ async function getGroqModels() {
 
   }
 
-
   modelCache =
     Array.isArray(data.data)
       ? data.data
       : [];
 
-
   modelCacheTime =
     now;
-
 
   return modelCache;
 }
@@ -167,8 +157,7 @@ function isVisionModel(model) {
       ? model.modalities
       : [])
 
-  ]
-  .map(
+  ].map(
     value =>
       String(value).toLowerCase()
   );
@@ -183,10 +172,6 @@ function isVisionModel(model) {
 
   }
 
-
-  /*
-   * モデル情報にモダリティがない場合の候補判定。
-   */
 
   const keywords = [
     "vision",
@@ -230,7 +215,8 @@ function getModelCandidates(
     const manual =
       all.find(
         model =>
-          model.id === MANUAL_MODEL
+          model.id ===
+          MANUAL_MODEL
       );
 
 
@@ -260,7 +246,7 @@ function getModelCandidates(
 
 
   /*
-   * 写真がある場合はVision候補を優先。
+   * 画像がある場合はVisionモデル優先。
    */
 
   if (hasImage) {
@@ -274,7 +260,7 @@ function getModelCandidates(
 
 
   /*
-   * テキストだけなら全モデル。
+   * テキストのみなら利用可能モデルを広く使う。
    */
 
   return all;
@@ -287,8 +273,10 @@ function getModelCandidates(
 
 const SYSTEM_PROMPT = `
 
-あなたは「AI学習チャット」の
+あなたは
+「AI学習チャット」の
 中学生向け学習サポートAIです。
+
 
 【基本】
 
@@ -296,11 +284,11 @@ const SYSTEM_PROMPT = `
 
 主な教科は、
 
-・国語
-・数学
-・社会
-・理科
-・英語
+国語
+数学
+社会
+理科
+英語
 
 です。
 
@@ -462,56 +450,68 @@ const SYSTEM_PROMPT = `
 まず矛盾している可能性を伝えてください。
 
 
-【数学の表記】
+【数学の数式】
 
-数学では特殊文字や数学記号を使って構いません。
+数学では、
+必要に応じて数学記号や数式を使ってください。
 
-例えば、
+MathJaxで表示できる数式を使います。
 
-x²
-x³
-√
-√3
-π
-±
-≠
-≤
-≥
-→
-cm²
-m²
+重要：
 
-などを必要に応じて使用してください。
+分数は、
+単なる「5/8」だけで済ませず、
+数式として表示したい場合は、
 
-分数も、
+\\( \\frac{5}{8} \\)
 
-3/5
+のようにしてください。
 
-のような普通の表記を使って構いません。
+平方根なら、
 
-Unicodeの数学記号は使用可能です。
+\\( \\sqrt{25} = 5 \\)
 
-ただし、
-LaTeXのソースコードを
-そのまま生徒に見せないでください。
+のようにしてください。
 
-例えば、
+二次式なら、
 
-\\frac{x}{2}
-\\sqrt{x}
+\\( x^2 + 6x + 8 = 0 \\)
 
-などをそのまま表示しないでください。
+のようにしてください。
 
-必要なら、
+不等号なら、
 
-x/2
-√x
+\\( x \\leq 10 \\)
 
-など、
-生徒がそのまま読める形にしてください。
+のようにしてください。
+
+面積なら、
+
+\\( 25\\mathrm{cm}^2 \\)
+
+のようにできます。
+
+複雑な式は、
+
+\\[
+\\frac{x+6}{5}\\times\\frac{x}{7}=48
+\\]
+
+のように表示できます。
+
+文章中の短い数式は、
+\\( ... \\)
+で囲んでください。
+
+独立した数式は、
+\\[ ... \\]
+で囲んでください。
+
+LaTeXのコードそのものを説明文として見せるのではなく、
+MathJaxで表示される数式として使用してください。
 
 
-【数学の問題文】
+【数学の注意】
 
 問題文を完全に確認できていない場合、
 勝手に条件を作らないでください。
@@ -525,8 +525,13 @@ x/2
 問題文の条件に矛盾がありそうなら、
 無理に計算を続けないでください。
 
+例えば、
+同じ左辺になる2つの式が
+異なる値になる場合などは、
+問題文の確認を優先してください。
 
-【重要】
+
+【学習状態】
 
 メッセージ数だけで
 学習段階を判断しないでください。
@@ -557,11 +562,12 @@ internal
 wrong_subject
 
 JSON以外の文章は禁止です。
+
 `;
 
 
 /* =========================================================
-   学習状態別指示
+   状態別指示
 ========================================================= */
 
 function getStateInstruction(
@@ -687,7 +693,7 @@ function parseAIJson(
 
 
   /*
-   * Markdownのコードブロックを除去。
+   * Markdownコードブロック除去
    */
 
   cleaned =
@@ -708,7 +714,7 @@ function parseAIJson(
 
 
   /*
-   * そのままJSON。
+   * 通常のJSON
    */
 
   try {
@@ -721,7 +727,7 @@ function parseAIJson(
 
 
   /*
-   * JSONの部分だけ抜き出す。
+   * JSON部分だけ抽出
    */
 
   const start =
@@ -812,8 +818,7 @@ function normalizeResult(
     answer =
       String(
         raw || ""
-      )
-      .trim();
+      ).trim();
 
   }
 
@@ -912,6 +917,7 @@ function sleep(
         milliseconds
       )
   );
+
 }
 
 
@@ -953,6 +959,7 @@ function getRetryAfterMs(
       );
 
     }
+
   }
 
 
@@ -970,14 +977,10 @@ async function requestGroq(
 ) {
 
   /*
-   * JSON形式を要求。
-   *
-   * モデルによって対応していない場合があるため、
-   * 呼び出し側で通常リクエストへの
-   * フォールバックを行う。
+   * JSONモードを利用。
    */
 
-  const body = {
+  const jsonBody = {
 
     model:
       modelId,
@@ -1019,7 +1022,7 @@ async function requestGroq(
 
         body:
           JSON.stringify(
-            body
+            jsonBody
           )
 
       }
@@ -1027,8 +1030,8 @@ async function requestGroq(
 
 
   /*
-   * response_formatが対応していないモデルの場合、
-   * JSON指定なしでもう一度試す。
+   * JSON modeに対応していないモデルの場合、
+   * 通常モードへフォールバック。
    */
 
   if (
@@ -1067,12 +1070,6 @@ async function requestGroq(
           firstMessage
         )
     ) {
-
-      console.log(
-        "JSON mode unsupported. Retrying normally:",
-        modelId
-      );
-
 
       response =
         await fetch(
@@ -1115,11 +1112,6 @@ async function requestGroq(
     }
     else {
 
-      /*
-       * JSON modeが原因でなければ、
-       * 元の400を返すための情報を持たせる。
-       */
-
       return {
 
         ok:false,
@@ -1128,7 +1120,9 @@ async function requestGroq(
 
         data:firstData,
 
-        raw:firstRaw
+        raw:firstRaw,
+
+        retryMs:0
 
       };
 
@@ -1279,9 +1273,7 @@ app.post(
 
 
       /*
-       * トークン節約。
-       *
-       * 直近8メッセージだけ送る。
+       * トークン削減のため直近8件だけ。
        */
 
       const history =
@@ -1328,9 +1320,7 @@ app.post(
 
 
       const groqMessages = [
-
         systemMessage
-
       ];
 
 
@@ -1427,12 +1417,16 @@ app.post(
 
 
       /*
-       * モデル一覧取得。
+       * モデル一覧
        */
 
       const models =
         await getGroqModels();
 
+
+      /*
+       * 候補
+       */
 
       const candidates =
         getModelCandidates(
@@ -1564,18 +1558,6 @@ app.post(
             );
 
 
-            console.log(
-              "判定:",
-              normalized.decision
-            );
-
-
-            console.log(
-              "次状態:",
-              normalized.nextState
-            );
-
-
             return res.json({
 
               id:
@@ -1648,7 +1630,7 @@ app.post(
 
 
             /*
-             * 待たずに次モデルへ。
+             * 待たずに次のモデルへ。
              */
 
             continue;
@@ -1692,25 +1674,7 @@ app.post(
 
 
           /*
-           * モデル関連なら次へ。
-           */
-
-          if (
-            result.status === 404 ||
-            /model|vision|image|unsupported|not found|access/i
-              .test(
-                errorMessage
-              )
-          ) {
-
-            continue;
-
-          }
-
-
-          /*
-           * それ以外でも、
-           * 他モデルがあれば試す。
+           * 他モデルを続けて試す。
            */
 
           continue;
@@ -1744,7 +1708,6 @@ app.post(
 
       /* =====================================================
          第2ラウンド
-         429だった場合だけ待って再試行
       ===================================================== */
 
       if (
@@ -1771,7 +1734,7 @@ app.post(
 
 
         console.log(
-          "再試行まで待機:",
+          "429再試行まで待機:",
           waitTime
         );
 
@@ -1782,50 +1745,15 @@ app.post(
 
 
         /*
-         * 最短待機時間が短いモデルから
          * 再試行。
          */
 
-        const retryModels =
-          [...candidates].sort(
-            (a,b) => {
-
-              const aWait =
-                rateLimited.find(
-                  item =>
-                    item.model ===
-                    a.id
-                )?.retryMs ||
-                999999;
-
-
-              const bWait =
-                rateLimited.find(
-                  item =>
-                    item.model ===
-                    b.id
-                )?.retryMs ||
-                999999;
-
-
-              return aWait - bWait;
-
-            }
-          );
-
-
         for (
           const model
-          of retryModels
+          of candidates
         ) {
 
           try {
-
-            console.log(
-              "再試行:",
-              model.id
-            );
-
 
             const result =
               await requestGroq(
@@ -1911,8 +1839,8 @@ app.post(
       /*
        * 全モデル失敗。
        *
-       * 生徒には内部のモデル名や429を
-       * そのまま見せない。
+       * 内部のモデル名やGroqエラーは
+       * 生徒へ見せない。
        */
 
       return res.status(
