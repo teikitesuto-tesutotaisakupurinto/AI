@@ -10,18 +10,14 @@ if (!config) {
 ========================================================= */
 
 let learningState = "hint";
-
 let messages = [];
-
 let answerIds = [];
-
 let imageData = null;
-
 let waiting = false;
 
 
 /* =========================================================
-   CHAT UI
+   画面
 ========================================================= */
 
 document.getElementById("app").innerHTML = `
@@ -90,11 +86,11 @@ button{
   display:flex;
   align-items:center;
 
+  padding:8px 12px;
+
   background:#fff;
 
   border-bottom:1px solid #e5e5e5;
-
-  padding:8px 12px;
 
   z-index:10;
 }
@@ -113,14 +109,13 @@ button{
 }
 
 .header-info{
-  margin-left:5px;
-
   min-width:0;
+  margin-left:5px;
 }
 
 .title{
-  font-weight:700;
   font-size:16px;
+  font-weight:700;
 }
 
 .subtitle{
@@ -137,17 +132,17 @@ button{
 
 
 /* =========================================================
-   ATTACHMENT
+   PHOTO
 ========================================================= */
 
 .attach-area{
   flex:none;
 
+  padding:11px;
+
   background:#fff;
 
   border-bottom:1px solid #e5e5e5;
-
-  padding:11px;
 }
 
 .attach-inner{
@@ -217,7 +212,7 @@ button{
 
 
 /* =========================================================
-   CHAT SCROLL AREA
+   SCROLL AREA
 ========================================================= */
 
 .body{
@@ -225,18 +220,22 @@ button{
 
   min-height:0;
 
-  overflow-y:auto;
+  height:0;
+
+  overflow-y:scroll;
 
   overflow-x:hidden;
 
   padding:
     16px
     10px
-    160px;
+    170px;
 
   -webkit-overflow-scrolling:touch;
 
   overscroll-behavior-y:contain;
+
+  scroll-behavior:smooth;
 }
 
 .messages{
@@ -257,9 +256,9 @@ button{
 .message{
   display:flex;
 
-  margin:9px 0;
-
   flex:none;
+
+  margin:9px 0;
 }
 
 .message.user{
@@ -347,13 +346,11 @@ button{
   70%,
   100%{
     transform:scale(.6);
-
     opacity:.35;
   }
 
   35%{
     transform:scale(1.5);
-
     opacity:1;
   }
 
@@ -361,7 +358,7 @@ button{
 
 
 /* =========================================================
-   COMPOSER
+   INPUT
 ========================================================= */
 
 .composer{
@@ -579,17 +576,13 @@ button{
     </div>
 
     <div class="subtitle">
-
       ${
         config.mode === "question"
           ? "質問"
           : "添削"
       }
-
       ・
-
       ${config.subjectName}
-
     </div>
 
   </div>
@@ -605,7 +598,6 @@ button{
 
   <div class="attach-inner">
 
-
     <div
       class="preview"
       id="preview"
@@ -615,7 +607,6 @@ button{
         id="previewImage"
         alt="添付画像"
       >
-
 
       <button
         class="remove"
@@ -638,7 +629,6 @@ button{
         写真を撮る
       </button>
 
-
       <button
         class="attach-button"
         id="select"
@@ -647,7 +637,6 @@ button{
         写真を選択
       </button>
 
-
       <input
         id="cameraInput"
         type="file"
@@ -655,7 +644,6 @@ button{
         capture="environment"
         hidden
       >
-
 
       <input
         id="fileInput"
@@ -672,7 +660,7 @@ button{
 
 
 <!-- =====================================================
-     SCROLL AREA
+     CHAT
 ===================================================== -->
 
 <div
@@ -712,7 +700,6 @@ button{
       placeholder="質問を入力…"
     ></textarea>
 
-
     <button
       id="send"
       type="button"
@@ -742,7 +729,6 @@ button{
       写真を切り取る
     </h2>
 
-
     <div class="crop-stage">
 
       <canvas
@@ -750,7 +736,6 @@ button{
       ></canvas>
 
     </div>
-
 
     <div class="crop-buttons">
 
@@ -761,7 +746,6 @@ button{
       >
         キャンセル
       </button>
-
 
       <button
         class="crop-use"
@@ -835,21 +819,77 @@ const cropCanvas =
 
 
 /* =========================================================
-   BACK
+   強制スクロール
 ========================================================= */
 
-document
-  .getElementById(
-    "back"
-  )
-  .onclick = () => {
+function forceScrollBottom(){
 
-    location.href =
-      config.mode === "question"
-        ? "/question.html"
-        : "/correction.html";
+  /*
+   * まず即時に一番下へ。
+   */
 
-  };
+  body.scrollTop =
+    body.scrollHeight;
+
+
+  /*
+   * scrollToでも指定。
+   */
+
+  body.scrollTo({
+    top:body.scrollHeight,
+    behavior:"smooth"
+  });
+
+
+  /*
+   * ブラウザのレイアウト更新後。
+   */
+
+  requestAnimationFrame(() => {
+
+    body.scrollTop =
+      body.scrollHeight;
+
+  });
+
+
+  /*
+   * 長い回答などで高さが変わった場合。
+   */
+
+  setTimeout(() => {
+
+    body.scrollTop =
+      body.scrollHeight;
+
+  },50);
+
+
+  setTimeout(() => {
+
+    body.scrollTop =
+      body.scrollHeight;
+
+  },150);
+
+
+  setTimeout(() => {
+
+    body.scrollTop =
+      body.scrollHeight;
+
+  },350);
+
+
+  setTimeout(() => {
+
+    body.scrollTop =
+      body.scrollHeight;
+
+  },700);
+
+}
 
 
 /* =========================================================
@@ -894,9 +934,12 @@ function addMessage(
   );
 
 
-  scrollToLatest(
-    row
-  );
+  /*
+   * メッセージ追加直後に
+   * 強制的に下へ。
+   */
+
+  forceScrollBottom();
 
 
   return row;
@@ -923,135 +966,6 @@ function addUser(
   return addMessage(
     text,
     "user"
-  );
-
-}
-
-
-/* =========================================================
-   最新メッセージへスクロール
-========================================================= */
-
-function scrollToLatest(
-  element
-){
-
-  if(!element){
-    return;
-  }
-
-
-  /*
-   * scrollIntoViewを使う。
-   *
-   * bodyのscrollTopを直接変更するより、
-   * スマホブラウザで安定しやすい。
-   */
-
-  requestAnimationFrame(
-    () => {
-
-      element.scrollIntoView({
-
-        behavior:"smooth",
-
-        block:"end",
-
-        inline:"nearest"
-
-      });
-
-    }
-  );
-
-}
-
-
-/*
- * DOMの高さが変化した後にも追従。
- *
- * 長いAI回答、
- * 画像、
- * フォント読み込みなどに対応。
- */
-
-function scrollToLatestDelayed(
-  element
-){
-
-  if(!element){
-    return;
-  }
-
-
-  requestAnimationFrame(
-    () => {
-
-      element.scrollIntoView({
-
-        behavior:"smooth",
-
-        block:"end",
-
-        inline:"nearest"
-
-      });
-
-    }
-  );
-
-
-  setTimeout(
-    () => {
-
-      element.scrollIntoView({
-
-        behavior:"smooth",
-
-        block:"end",
-
-        inline:"nearest"
-
-      });
-
-    },
-    100
-  );
-
-
-  setTimeout(
-    () => {
-
-      element.scrollIntoView({
-
-        behavior:"smooth",
-
-        block:"end",
-
-        inline:"nearest"
-
-      });
-
-    },
-    300
-  );
-
-
-  setTimeout(
-    () => {
-
-      element.scrollIntoView({
-
-        behavior:"smooth",
-
-        block:"end",
-
-        inline:"nearest"
-
-      });
-
-    },
-    600
   );
 
 }
@@ -1114,14 +1028,34 @@ function showThinking(){
   );
 
 
-  scrollToLatestDelayed(
-    row
-  );
+  /*
+   * ぽわぽわを表示した瞬間に下へ。
+   */
+
+  forceScrollBottom();
 
 
   return row;
 
 }
+
+
+/* =========================================================
+   BACK
+========================================================= */
+
+document
+  .getElementById(
+    "back"
+  )
+  .onclick = () => {
+
+    location.href =
+      config.mode === "question"
+        ? "/question.html"
+        : "/correction.html";
+
+  };
 
 
 /* =========================================================
@@ -1260,7 +1194,6 @@ function openCrop(){
     "show"
   );
 
-
   setupCrop();
 
 }
@@ -1344,7 +1277,7 @@ function setupCrop(){
 
 
 /* =========================================================
-   DRAW CROP
+   DRAW
 ========================================================= */
 
 function drawCrop(){
@@ -1469,10 +1402,6 @@ function pointerPosition(
 }
 
 
-/* =========================================================
-   CROP DOWN
-========================================================= */
-
 cropCanvas.addEventListener(
   "pointerdown",
   event => {
@@ -1520,10 +1449,6 @@ cropCanvas.addEventListener(
   }
 );
 
-
-/* =========================================================
-   CROP MOVE
-========================================================= */
 
 cropCanvas.addEventListener(
   "pointermove",
@@ -1585,10 +1510,6 @@ cropCanvas.addEventListener(
   }
 );
 
-
-/* =========================================================
-   CROP UP
-========================================================= */
 
 cropCanvas.addEventListener(
   "pointerup",
@@ -1704,8 +1625,7 @@ document
 
 
     /*
-     * 写真を切り取っても、
-     * 入力中の質問はそのまま。
+     * 入力中の文章はそのまま。
      */
 
     input.focus();
@@ -1830,7 +1750,7 @@ async function sendMessage(){
 
 
   /*
-   * 生徒メッセージ。
+   * 生徒メッセージを追加。
    */
 
   let displayText =
@@ -1855,7 +1775,7 @@ async function sendMessage(){
 
 
   /*
-   * 会話履歴。
+   * AIへ渡す履歴。
    */
 
   messages.push({
@@ -1871,10 +1791,7 @@ async function sendMessage(){
 
 
   /*
-   * 入力欄だけ消す。
-   *
-   * 写真選択前の文章は、
-   * 写真を選んでいる間は保持される。
+   * 送信後は入力欄を空にする。
    */
 
   input.value =
@@ -1890,16 +1807,14 @@ async function sendMessage(){
 
 
   /*
-   * 生徒メッセージを最新位置へ。
+   * 生徒メッセージを強制的に下へ。
    */
 
-  scrollToLatestDelayed(
-    userRow
-  );
+  forceScrollBottom();
 
 
   /*
-   * AI待機中。
+   * 待機表示。
    */
 
   const thinking =
@@ -1959,7 +1874,7 @@ async function sendMessage(){
 
 
     /*
-     * 待機表示を削除。
+     * ぽわぽわ削除。
      */
 
     thinking.remove();
@@ -1976,7 +1891,7 @@ async function sendMessage(){
 
 
     /*
-     * 会話履歴へ追加。
+     * 会話履歴。
      */
 
     messages.push({
@@ -2004,7 +1919,7 @@ async function sendMessage(){
 
 
     /*
-     * AIが判断した学習状態。
+     * AIが判断した状態。
      */
 
     if(
@@ -2018,16 +1933,48 @@ async function sendMessage(){
 
 
     /*
-     * AI回答を少し遅れて再度追従。
+     * AI回答追加後も強制スクロール。
      */
 
-    scrollToLatestDelayed(
-      aiRow
+    forceScrollBottom();
+
+
+    /*
+     * レイアウト確定後にも再度。
+     */
+
+    setTimeout(
+      () => {
+
+        forceScrollBottom();
+
+      },
+      100
+    );
+
+
+    setTimeout(
+      () => {
+
+        forceScrollBottom();
+
+      },
+      350
+    );
+
+
+    setTimeout(
+      () => {
+
+        forceScrollBottom();
+
+      },
+      700
     );
 
 
     /*
-     * 送信済み写真を解除。
+     * 送信済み画像を解除。
      */
 
     clearPhoto();
@@ -2036,16 +1983,19 @@ async function sendMessage(){
   catch(error){
 
     /*
-     * 待機表示を削除。
+     * ぽわぽわ削除。
      */
 
     thinking.remove();
 
 
-    const errorRow =
-      addAI(
-        "AIとの接続でエラーが発生しました。"
-      );
+    /*
+     * エラー。
+     */
+
+    addAI(
+      "AIとの接続でエラーが発生しました。"
+    );
 
 
     addAI(
@@ -2057,9 +2007,7 @@ async function sendMessage(){
     );
 
 
-    scrollToLatestDelayed(
-      errorRow
-    );
+    forceScrollBottom();
 
   }
   finally{
@@ -2080,7 +2028,7 @@ async function sendMessage(){
 
 
 /* =========================================================
-   PAGE HIDE
+   ページを離れたらセッション破棄
 ========================================================= */
 
 window.addEventListener(
