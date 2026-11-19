@@ -21,7 +21,7 @@ let waiting = false;
 
 
 /* =========================================================
-   チャット画面
+   CHAT UI
 ========================================================= */
 
 document.getElementById("app").innerHTML = `
@@ -38,13 +38,16 @@ body{
   margin:0;
   padding:0;
   width:100%;
-  min-height:100%;
+  height:100%;
+  overflow:hidden;
+
   font-family:
     -apple-system,
     BlinkMacSystemFont,
     "Noto Sans JP",
     "Yu Gothic",
     sans-serif;
+
   background:#f7f7f8;
   color:#222;
 }
@@ -58,10 +61,18 @@ button{
   cursor:pointer;
 }
 
+
+/* =========================================================
+   CHAT
+========================================================= */
+
 .chat{
-  min-height:100dvh;
+  width:100%;
+  height:100dvh;
+
   display:flex;
   flex-direction:column;
+
   background:#f7f7f8;
 }
 
@@ -72,18 +83,19 @@ button{
 
 .header{
   height:64px;
+  min-height:64px;
+
   flex:none;
 
   display:flex;
   align-items:center;
 
   background:#fff;
+
   border-bottom:1px solid #e5e5e5;
 
   padding:8px 12px;
 
-  position:sticky;
-  top:0;
   z-index:10;
 }
 
@@ -91,7 +103,10 @@ button{
   width:42px;
   height:42px;
 
+  flex:none;
+
   border:0;
+
   background:transparent;
 
   font-size:24px;
@@ -99,6 +114,8 @@ button{
 
 .header-info{
   margin-left:5px;
+
+  min-width:0;
 }
 
 .title{
@@ -108,13 +125,19 @@ button{
 
 .subtitle{
   margin-top:2px;
+
   font-size:12px;
+
   color:#777;
+
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
 }
 
 
 /* =========================================================
-   PHOTO AREA
+   ATTACHMENT
 ========================================================= */
 
 .attach-area{
@@ -129,11 +152,13 @@ button{
 
 .attach-inner{
   width:min(760px,100%);
+
   margin:auto;
 }
 
 .attach-buttons{
   display:flex;
+
   gap:8px;
 }
 
@@ -143,6 +168,7 @@ button{
   height:43px;
 
   border:1px solid #ddd;
+
   border-radius:11px;
 
   background:#fff;
@@ -156,6 +182,7 @@ button{
 
 .preview{
   display:none;
+
   margin-bottom:9px;
 }
 
@@ -178,6 +205,7 @@ button{
   margin-top:6px;
 
   border:0;
+
   border-radius:8px;
 
   padding:7px 10px;
@@ -189,25 +217,36 @@ button{
 
 
 /* =========================================================
-   CHAT BODY
+   CHAT SCROLL AREA
 ========================================================= */
 
 .body{
   flex:1;
 
+  min-height:0;
+
   overflow-y:auto;
+
+  overflow-x:hidden;
 
   padding:
     16px
     10px
-    145px;
+    160px;
 
-  scroll-behavior:smooth;
+  -webkit-overflow-scrolling:touch;
+
+  overscroll-behavior-y:contain;
 }
 
 .messages{
   width:min(760px,100%);
-  margin:auto;
+
+  margin:0 auto;
+
+  display:flex;
+
+  flex-direction:column;
 }
 
 
@@ -217,7 +256,10 @@ button{
 
 .message{
   display:flex;
+
   margin:9px 0;
+
+  flex:none;
 }
 
 .message.user{
@@ -305,11 +347,13 @@ button{
   70%,
   100%{
     transform:scale(.6);
+
     opacity:.35;
   }
 
   35%{
     transform:scale(1.5);
+
     opacity:1;
   }
 
@@ -355,6 +399,7 @@ button{
   flex:1;
 
   min-height:47px;
+
   max-height:140px;
 
   resize:none;
@@ -380,7 +425,10 @@ button{
 
 #send{
   width:64px;
+
   height:47px;
+
+  flex:none;
 
   border:0;
 
@@ -399,7 +447,7 @@ button{
 
 
 /* =========================================================
-   CROP MODAL
+   CROP
 ========================================================= */
 
 #cropModal{
@@ -500,6 +548,11 @@ button{
     max-width:92%;
   }
 
+  .body{
+    padding-left:8px;
+    padding-right:8px;
+  }
+
 }
 
 </style>
@@ -526,13 +579,17 @@ button{
     </div>
 
     <div class="subtitle">
+
       ${
         config.mode === "question"
           ? "質問"
           : "添削"
       }
+
       ・
+
       ${config.subjectName}
+
     </div>
 
   </div>
@@ -558,6 +615,7 @@ button{
         id="previewImage"
         alt="添付画像"
       >
+
 
       <button
         class="remove"
@@ -614,7 +672,7 @@ button{
 
 
 <!-- =====================================================
-     CHAT
+     SCROLL AREA
 ===================================================== -->
 
 <div
@@ -674,7 +732,9 @@ button{
      CROP
 ===================================================== -->
 
-<div id="cropModal">
+<div
+  id="cropModal"
+>
 
   <div class="crop-box">
 
@@ -834,7 +894,9 @@ function addMessage(
   );
 
 
-  scrollToBottom();
+  scrollToLatest(
+    row
+  );
 
 
   return row;
@@ -867,29 +929,35 @@ function addUser(
 
 
 /* =========================================================
-   自動スクロール
+   最新メッセージへスクロール
 ========================================================= */
 
-/*
- * 最新のメッセージが追加されたら、
- * チャットを一番下までスムーズに移動。
- *
- * body.scrollTopだけではなく、
- * scrollTo()を使う。
- */
+function scrollToLatest(
+  element
+){
 
-function scrollToBottom(){
+  if(!element){
+    return;
+  }
+
+
+  /*
+   * scrollIntoViewを使う。
+   *
+   * bodyのscrollTopを直接変更するより、
+   * スマホブラウザで安定しやすい。
+   */
 
   requestAnimationFrame(
     () => {
 
-      body.scrollTo({
+      element.scrollIntoView({
 
-        top:
-          body.scrollHeight,
+        behavior:"smooth",
 
-        behavior:
-          "smooth"
+        block:"end",
+
+        inline:"nearest"
 
       });
 
@@ -900,62 +968,90 @@ function scrollToBottom(){
 
 
 /*
- * AI回答が長い場合など、
- * DOMの高さが変わった後にも追従する。
+ * DOMの高さが変化した後にも追従。
+ *
+ * 長いAI回答、
+ * 画像、
+ * フォント読み込みなどに対応。
  */
 
-function scrollToBottomDelayed(){
+function scrollToLatestDelayed(
+  element
+){
+
+  if(!element){
+    return;
+  }
+
 
   requestAnimationFrame(
     () => {
 
-      body.scrollTo({
+      element.scrollIntoView({
 
-        top:
-          body.scrollHeight,
+        behavior:"smooth",
 
-        behavior:
-          "smooth"
+        block:"end",
+
+        inline:"nearest"
 
       });
 
-
-      setTimeout(
-        () => {
-
-          body.scrollTo({
-
-            top:
-              body.scrollHeight,
-
-            behavior:
-              "smooth"
-
-          });
-
-        },
-        80
-      );
-
-
-      setTimeout(
-        () => {
-
-          body.scrollTo({
-
-            top:
-              body.scrollHeight,
-
-            behavior:
-              "smooth"
-
-          });
-
-        },
-        250
-      );
-
     }
+  );
+
+
+  setTimeout(
+    () => {
+
+      element.scrollIntoView({
+
+        behavior:"smooth",
+
+        block:"end",
+
+        inline:"nearest"
+
+      });
+
+    },
+    100
+  );
+
+
+  setTimeout(
+    () => {
+
+      element.scrollIntoView({
+
+        behavior:"smooth",
+
+        block:"end",
+
+        inline:"nearest"
+
+      });
+
+    },
+    300
+  );
+
+
+  setTimeout(
+    () => {
+
+      element.scrollIntoView({
+
+        behavior:"smooth",
+
+        block:"end",
+
+        inline:"nearest"
+
+      });
+
+    },
+    600
   );
 
 }
@@ -1018,11 +1114,9 @@ function showThinking(){
   );
 
 
-  /*
-   * 「・・・」が追加されたら下へ。
-   */
-
-  scrollToBottom();
+  scrollToLatestDelayed(
+    row
+  );
 
 
   return row;
@@ -1093,7 +1187,7 @@ let dragStart =
 
 
 /* =========================================================
-   IMAGE
+   FILE
 ========================================================= */
 
 function handleFile(
@@ -1286,10 +1380,6 @@ function drawCrop(){
   );
 
 
-  /*
-   * 外側を暗くする。
-   */
-
   ctx.fillStyle =
     "rgba(0,0,0,.48)";
 
@@ -1317,10 +1407,6 @@ function drawCrop(){
     "evenodd"
   );
 
-
-  /*
-   * 切り取り範囲。
-   */
 
   ctx.strokeStyle =
     "#fff";
@@ -1384,7 +1470,7 @@ function pointerPosition(
 
 
 /* =========================================================
-   CROP POINTER DOWN
+   CROP DOWN
 ========================================================= */
 
 cropCanvas.addEventListener(
@@ -1436,7 +1522,7 @@ cropCanvas.addEventListener(
 
 
 /* =========================================================
-   CROP POINTER MOVE
+   CROP MOVE
 ========================================================= */
 
 cropCanvas.addEventListener(
@@ -1501,7 +1587,7 @@ cropCanvas.addEventListener(
 
 
 /* =========================================================
-   CROP POINTER UP
+   CROP UP
 ========================================================= */
 
 cropCanvas.addEventListener(
@@ -1618,8 +1704,8 @@ document
 
 
     /*
-     * 写真を切り取っても
-     * 質問入力欄はそのまま。
+     * 写真を切り取っても、
+     * 入力中の質問はそのまま。
      */
 
     input.focus();
@@ -1704,11 +1790,6 @@ input.addEventListener(
   "keydown",
   event => {
 
-    /*
-     * Enterで送信。
-     * Shift + Enterなら改行。
-     */
-
     if(
       event.key === "Enter" &&
       !event.shiftKey
@@ -1745,12 +1826,11 @@ async function sendMessage(){
   ){
 
     return;
-
   }
 
 
   /*
-   * 生徒側の表示。
+   * 生徒メッセージ。
    */
 
   let displayText =
@@ -1768,15 +1848,14 @@ async function sendMessage(){
   }
 
 
-  addUser(
-    displayText
-  );
+  const userRow =
+    addUser(
+      displayText
+    );
 
 
   /*
-   * AIへ渡す会話。
-   *
-   * localStorageには保存しない。
+   * 会話履歴。
    */
 
   messages.push({
@@ -1792,7 +1871,10 @@ async function sendMessage(){
 
 
   /*
-   * 入力欄だけ空にする。
+   * 入力欄だけ消す。
+   *
+   * 写真選択前の文章は、
+   * 写真を選んでいる間は保持される。
    */
 
   input.value =
@@ -1808,18 +1890,20 @@ async function sendMessage(){
 
 
   /*
+   * 生徒メッセージを最新位置へ。
+   */
+
+  scrollToLatestDelayed(
+    userRow
+  );
+
+
+  /*
    * AI待機中。
    */
 
   const thinking =
     showThinking();
-
-
-  /*
-   * 送信後も必ず一番下。
-   */
-
-  scrollToBottomDelayed();
 
 
   try{
@@ -1875,23 +1959,24 @@ async function sendMessage(){
 
 
     /*
-     * 「・・・」を削除。
+     * 待機表示を削除。
      */
 
     thinking.remove();
 
 
     /*
-     * AI回答を追加。
+     * AI回答。
      */
 
-    addAI(
-      data.answer
-    );
+    const aiRow =
+      addAI(
+        data.answer
+      );
 
 
     /*
-     * AI回答を会話履歴へ。
+     * 会話履歴へ追加。
      */
 
     messages.push({
@@ -1919,10 +2004,12 @@ async function sendMessage(){
 
 
     /*
-     * AIが判断した次の状態。
+     * AIが判断した学習状態。
      */
 
-    if(data.nextState){
+    if(
+      data.nextState
+    ){
 
       learningState =
         data.nextState;
@@ -1931,14 +2018,16 @@ async function sendMessage(){
 
 
     /*
-     * AI回答後に確実に下まで移動。
+     * AI回答を少し遅れて再度追従。
      */
 
-    scrollToBottomDelayed();
+    scrollToLatestDelayed(
+      aiRow
+    );
 
 
     /*
-     * 送信済み画像を解除。
+     * 送信済み写真を解除。
      */
 
     clearPhoto();
@@ -1947,19 +2036,16 @@ async function sendMessage(){
   catch(error){
 
     /*
-     * 「・・・」を削除。
+     * 待機表示を削除。
      */
 
     thinking.remove();
 
 
-    /*
-     * エラー表示。
-     */
-
-    addAI(
-      "AIとの接続でエラーが発生しました。"
-    );
+    const errorRow =
+      addAI(
+        "AIとの接続でエラーが発生しました。"
+      );
 
 
     addAI(
@@ -1971,7 +2057,9 @@ async function sendMessage(){
     );
 
 
-    scrollToBottomDelayed();
+    scrollToLatestDelayed(
+      errorRow
+    );
 
   }
   finally{
@@ -1992,7 +2080,7 @@ async function sendMessage(){
 
 
 /* =========================================================
-   ページを離れたらセッション破棄
+   PAGE HIDE
 ========================================================= */
 
 window.addEventListener(
