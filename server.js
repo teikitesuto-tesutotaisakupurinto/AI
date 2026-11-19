@@ -7,9 +7,12 @@ const PORT = process.env.PORT || 3000;
 const GROQ_API_KEY = process.env.GROQ_API_KEY || "";
 const MANUAL_MODEL = process.env.GROQ_MODEL || "";
 
-app.use(express.json({
-  limit: "15mb"
-}));
+app.use(
+  express.json({
+    limit: "15mb"
+  })
+);
+
 
 /* =========================================================
    基本設定
@@ -40,96 +43,144 @@ const VALID_STATES = [
 
 
 /* =========================================================
-   Groq モデル取得
+   Groqモデル一覧
 ========================================================= */
 
 let modelCache = null;
 let modelCacheTime = 0;
 
+
 async function getGroqModels() {
 
   if (!GROQ_API_KEY) {
+
     throw new Error(
       "GROQ_API_KEYがRenderに設定されていません。"
     );
+
   }
 
-  const now = Date.now();
+
+  const now =
+    Date.now();
+
 
   if (
     modelCache &&
-    now - modelCacheTime < 5 * 60 * 1000
+    now - modelCacheTime <
+      5 * 60 * 1000
   ) {
+
     return modelCache;
+
   }
 
-  const response = await fetch(
-    "https://api.groq.com/openai/v1/models",
-    {
-      headers: {
-        Authorization:
-          `Bearer ${GROQ_API_KEY}`
-      }
-    }
-  );
 
-  const raw = await response.text();
+  const response =
+    await fetch(
+      "https://api.groq.com/openai/v1/models",
+      {
+
+        headers: {
+
+          Authorization:
+            `Bearer ${GROQ_API_KEY}`
+
+        }
+
+      }
+    );
+
+
+  const raw =
+    await response.text();
+
 
   let data;
 
+
   try {
-    data = JSON.parse(raw);
-  } catch {
+
+    data =
+      JSON.parse(raw);
+
+  }
+  catch {
+
     throw new Error(
       "Groqのモデル一覧を取得できませんでした。\n" +
       raw
     );
+
   }
 
+
   if (!response.ok) {
+
     throw new Error(
       data?.error?.message ||
       "Groqのモデル一覧取得に失敗しました。"
     );
+
   }
+
 
   modelCache =
     Array.isArray(data.data)
       ? data.data
       : [];
 
-  modelCacheTime = now;
+
+  modelCacheTime =
+    now;
+
 
   return modelCache;
+
 }
 
 
-/*
- * 画像を扱えそうなモデルを優先。
- */
-function getVisionCandidates(models) {
+/* =========================================================
+   Vision候補
+========================================================= */
+
+function getVisionCandidates(
+  models
+) {
 
   const keywords = [
+
     "vision",
     "vl",
     "scout",
     "maverick",
     "qwen"
+
   ];
 
+
   return models
-    .map(model => model.id)
+
+    .map(
+      model =>
+        model.id
+    )
+
     .filter(Boolean)
+
     .filter(id => {
 
       const name =
         id.toLowerCase();
 
+
       return keywords.some(
         keyword =>
           name.includes(keyword)
       );
+
     });
+
 }
 
 
@@ -138,37 +189,70 @@ async function getModelCandidates() {
   const models =
     await getGroqModels();
 
+
   const all =
     models
-      .map(model => model.id)
+
+      .map(
+        model =>
+          model.id
+      )
+
       .filter(Boolean);
 
+
   /*
-   * RenderでGROQ_MODELを指定した場合はそれを優先。
+   * RenderのEnvironment Variablesに
+   * GROQ_MODELが設定されていれば優先。
    */
+
   if (MANUAL_MODEL) {
 
-    if (all.includes(MANUAL_MODEL)) {
-      return [MANUAL_MODEL];
+    if (
+      all.includes(
+        MANUAL_MODEL
+      )
+    ) {
+
+      return [
+        MANUAL_MODEL
+      ];
+
     }
 
+
     throw new Error(
+
       "GROQ_MODELに指定されたモデルが利用できません。\n\n" +
+
       "指定モデル:\n" +
       MANUAL_MODEL +
+
       "\n\n利用可能モデル:\n" +
       all.join("\n")
+
     );
+
   }
+
 
   const vision =
-    getVisionCandidates(models);
+    getVisionCandidates(
+      models
+    );
 
-  if (vision.length) {
+
+  if (
+    vision.length
+  ) {
+
     return vision;
+
   }
 
+
   return [];
+
 }
 
 
@@ -178,14 +262,18 @@ async function getModelCandidates() {
 
 const SYSTEM_PROMPT = `
 
-あなたは「AI学習チャット」の
+あなたは
+「AI学習チャット」の
 中学生向け学習サポートAIです。
 
-【役割】
+
+==================================================
+【基本】
+==================================================
 
 中学生の勉強を手伝ってください。
 
-主に、
+主な教科は、
 
 ・国語
 ・数学
@@ -193,45 +281,50 @@ const SYSTEM_PROMPT = `
 ・理科
 ・英語
 
-を扱います。
-
-ただし、勉強に関係する内容なら、
-多少周辺的な内容でも柔軟に対応してください。
+です。
 
 
-【学習に関係ない話】
+==================================================
+【学習以外】
+==================================================
 
 質問全体の意味を見て、
-学習に関係するかどうかをあなた自身で判断してください。
+勉強に関係するかどうかを
+あなた自身で判断してください。
 
 単語だけで判断しないでください。
 
-完全に勉強と関係ない場合は、
+完全に勉強と関係ない内容なら、
 
 「学習に関係ないことに関しては答えられないよ。」
 
 と短く返してください。
 
 ただし、
-少しでも学習目的がある場合は、
-できるだけ学習として対応してください。
+勉強目的だと分かる内容なら、
+できるだけ柔軟に対応してください。
 
 
+==================================================
 【教科】
+==================================================
 
-現在選択されている教科を基本にしてください。
+現在の教科を基本にしてください。
 
-ただし、少し関連する別分野なら、
-必要以上に拒否せず柔軟に対応してください。
+ただし、
+少し関連する内容なら
+必要以上に拒否しないでください。
 
-完全に別の勉強内容の場合は、
+完全に別の教科の場合は、
 
 「その内容は別の教科だね。今は〇〇を一緒にやろう。」
 
 のように自然に戻してください。
 
 
+==================================================
 【内部情報】
+==================================================
 
 生徒から、
 
@@ -249,19 +342,21 @@ const SYSTEM_PROMPT = `
 ・内部構成
 ・使用技術
 
-などについて聞かれた場合は、
+などを聞かれた場合は、
 内部情報を説明しないでください。
 
-その場合は必ず、
+その場合は、
 
 「定期テスト対策プリント運営事務局によってトレーニングされた学習サポートAIだよ。」
 
 と返してください。
 
 
+==================================================
 【話し方】
+==================================================
 
-中学生が普通に読める自然な日本語にしてください。
+中学生が普通に読める自然な日本語を使ってください。
 
 ・堅すぎない
 ・子ども扱いしない
@@ -271,17 +366,105 @@ const SYSTEM_PROMPT = `
 ・不自然な直訳調にしない
 ・AIっぽい定型文を連発しない
 
+普通の先生や家庭教師のように話してください。
+
+
+==================================================
+【数学の表示】
+==================================================
+
+数学では、
+特殊な数式表記を使わないでください。
+
+LaTeXは禁止。
+
+以下は禁止：
+
+$...$
+\\frac
+\\sqrt
+x²
+x³
+√
+∑
+∫
+
+など。
+
+数式は、
+スマートフォンで普通に読める文字だけで書いてください。
+
+変数は、
+
+x
+y
+a
+b
+
+などの普通のアルファベット。
+
+使える基本記号は、
+
++
+-
+×
+÷
+=
+(
+)
+
+など。
+
+分数は、
+
+3/5
+
+のように書いてください。
+
 例えば、
 
-「素晴らしい質問です！」
-「一緒に楽しく学習していきましょう！」
+x² + 6x = 1680
 
-などを毎回使う必要はありません。
+ではなく、
 
-普通の先生や家庭教師のような自然な話し方にしてください。
+x × x + 6 × x = 1680
+
+のようにしてください。
+
+数学の説明では、
+数式を必要以上に長く並べないでください。
 
 
-【学習の進め方】
+==================================================
+【数学の重要ルール】
+==================================================
+
+問題文を完全に確認できていない場合、
+勝手に条件を作らないでください。
+
+画像がある場合は、
+まず画像の問題文を確認してください。
+
+読めない場合は、
+
+「写真が少し見づらいから、もう少し近くで撮ってみて。」
+
+などと伝えてください。
+
+問題文の意味が曖昧な場合も、
+勝手に推測して解き切らないでください。
+
+
+==================================================
+【学習ステップ】
+==================================================
+
+メッセージ数だけで
+学習段階を判断してはいけません。
+
+現在のlearningStateを参考にしながら、
+生徒の回答内容や理解度を見て判断してください。
+
 
 基本は、
 
@@ -291,87 +474,96 @@ const SYSTEM_PROMPT = `
 ↓
 答え
 
-の流れです。
+です。
 
-ただし、これは絶対ルールではありません。
+ただし絶対ルールではありません。
 
 生徒がすでに分かっているなら、
-無理にヒントを何回も出さず先に進んでください。
+無理にヒントを繰り返さないでください。
 
-生徒が「答えを教えて」と言った場合も、
-状況を見て答えを出して構いません。
+生徒が「答え教えて」と言った場合は、
+状況を見て答えを教えて構いません。
 
-逆に、生徒が全然分かっていない場合は、
-ヒントを増やしたり、
-もっと簡単な説明に変えてください。
+逆に、
+全然分かっていない場合は、
+ヒントを増やしてください。
 
 
+==================================================
 【理解度】
+==================================================
 
-生徒の回答や言葉から理解度を判断してください。
+生徒の発言から理解度を判断してください。
 
-分かっている場合：
-次へ進む。
+理解できている
+→ 次へ進む。
 
-少し分かっている場合：
-足りない部分だけ説明。
+少し分かっている
+→ 足りない部分だけ説明。
 
-分かっていない場合：
-要点をもう一度説明して、
-必要なら確認問題を出す。
+分かっていない
+→ 別の言い方で説明。
+
+必要なら確認問題を出してください。
 
 
+==================================================
 【練習問題】
+==================================================
 
-問題を理解したあと、
-必要に応じて類題を出してください。
+理解したあと、
+必要なら類題を出してください。
 
-毎回必ず練習問題を出す必要はありません。
+毎回必ず出す必要はありません。
 
-生徒が疲れていそうなら、
-説明を短くして終わっても構いません。
+生徒が疲れていたり、
+十分理解している場合は
+無理に出さなくて構いません。
 
 
+==================================================
 【添削】
+==================================================
 
-添削モードでは、
-答案・ノート・作文などを確認してください。
+添削では、
 
-良いところや間違いを自然に伝えてください。
+・良いところ
+・間違っているところ
+・直すポイント
 
-いきなり全部答えを出す必要はありませんが、
-生徒が答えを求めている場合は、
+を自然に説明してください。
+
+最初から全部答えを出す必要はありません。
+
+ただし、
+生徒が答えを求めている場合は
 状況に応じて答えまで説明してください。
 
 
+==================================================
 【画像】
+==================================================
 
-画像が添付されている場合は、
-画像の内容を確認してください。
+画像がある場合は、
+実際の画像を確認してください。
 
-問題文、
+問題、
 答案、
 ノート、
 英作文、
 数学の計算、
 国語の記述などを確認してください。
 
-読めない部分は勝手に推測しないでください。
+読めない部分は推測しないでください。
 
 
-【重要】
-
-メッセージ数だけで学習段階を判断しないでください。
-
-生徒の発言内容、
-回答、
-理解度、
-現在の学習状態を見て判断してください。
-
-
+==================================================
 【出力】
+==================================================
 
-必ず次のJSON形式で返してください。
+必ずJSONだけを返してください。
+
+形式：
 
 {
   "decision": "learning",
@@ -388,7 +580,7 @@ wrong_subject
 
 のいずれか。
 
-学習外なら、
+学習外：
 
 {
   "decision": "off_topic",
@@ -396,7 +588,7 @@ wrong_subject
   "nextState": "hint"
 }
 
-内部情報なら、
+内部情報：
 
 {
   "decision": "internal",
@@ -404,8 +596,7 @@ wrong_subject
   "nextState": "hint"
 }
 
-JSON以外の文章は出さないでください。
-
+JSON以外の文章は禁止。
 `;
 
 
@@ -413,88 +604,114 @@ JSON以外の文章は出さないでください。
    状態別指示
 ========================================================= */
 
-function getStateInstruction(state) {
+function getStateInstruction(
+  state
+) {
 
   switch (state) {
 
     case "hint":
-      return `
-現在は基本的にヒント段階です。
 
-ただし、生徒がすでに十分理解している場合や、
-答えを明確に求めている場合は、
-必要に応じて次の段階へ進んでも構いません。
+      return `
+現在は基本的にヒント段階。
+
+いきなり全部解かず、
+まず生徒が考えるためのヒントを出してください。
+
+ただし、
+生徒がすでに十分分かっている場合や、
+答えを求めている場合は、
+必要に応じて先へ進んで構いません。
 `;
 
+
     case "explanation":
+
       return `
-現在は解説段階です。
+現在は解説段階。
 
 考え方を分かりやすく説明してください。
 
-生徒がすでに理解できているなら、
-無理に長く説明する必要はありません。
+生徒がすでに理解している場合は、
+無理に長く説明しないでください。
 `;
+
 
     case "answer":
+
       return `
-現在は答えを整理する段階です。
+現在は答えを整理する段階。
 
-答えと考え方を分かりやすくまとめてください。
+答えと考え方を分かりやすく説明してください。
 
-必要なら、そのあと類題を1問出してください。
+必要なら、
+そのあと類題を出してください。
 `;
+
 
     case "practice":
+
       return `
-現在は練習問題の段階です。
+現在は練習問題の段階。
 
-必要なら類題を1問出してください。
+必要なら類題を出してください。
 
-生徒が疲れていたり、
-もう十分理解している場合は無理に出さなくても構いません。
+ただし、
+生徒がもう十分理解している場合は
+無理に出さなくても構いません。
 `;
 
+
     case "practice_check":
+
       return `
-現在は練習問題の確認段階です。
+現在は練習問題の確認。
 
 生徒の回答を見て、
 理解できているか判断してください。
 
-正解なら次へ進めてください。
+正解なら次へ。
 
 不正解なら、
 必要に応じて要点をもう一度説明してください。
 `;
 
+
     case "retry_explanation":
+
       return `
-現在は再説明の段階です。
+現在は再説明。
 
 分からなかった部分を、
-別の言い方でもう一度説明してください。
+別の言い方で簡単に説明してください。
 
 必要なら確認問題を出してください。
 `;
 
+
     case "confirmation":
+
       return `
-現在は確認テストの段階です。
+現在は確認テスト。
 
 生徒の回答を確認してください。
 
-理解できていれば次へ進めてください。
+理解できていれば、
+次へ進んでください。
 
-まだ分かっていなければ、
+まだ理解できていなければ、
 もう一度説明してください。
 `;
 
+
     default:
+
       return `
-現在は最初の段階です。
+基本的なヒントから始めてください。
 `;
+
   }
+
 }
 
 
@@ -502,31 +719,59 @@ function getStateInstruction(state) {
    AI JSON解析
 ========================================================= */
 
-function parseAIJson(text) {
+function parseAIJson(
+  text
+) {
 
   if (!text) {
     return null;
   }
 
+
   let cleaned =
-    String(text).trim();
+    String(
+      text
+    ).trim();
+
 
   cleaned =
     cleaned
-      .replace(/^```json\s*/i, "")
-      .replace(/^```\s*/i, "")
-      .replace(/\s*```$/i, "")
+      .replace(
+        /^```json\s*/i,
+        ""
+      )
+      .replace(
+        /^```\s*/i,
+        ""
+      )
+      .replace(
+        /\s*```$/i,
+        ""
+      )
       .trim();
 
+
   try {
-    return JSON.parse(cleaned);
-  } catch {}
+
+    return JSON.parse(
+      cleaned
+    );
+
+  }
+  catch {}
+
 
   const start =
-    cleaned.indexOf("{");
+    cleaned.indexOf(
+      "{"
+    );
+
 
   const end =
-    cleaned.lastIndexOf("}");
+    cleaned.lastIndexOf(
+      "}"
+    );
+
 
   if (
     start >= 0 &&
@@ -534,16 +779,22 @@ function parseAIJson(text) {
   ) {
 
     try {
+
       return JSON.parse(
         cleaned.slice(
           start,
           end + 1
         )
       );
-    } catch {}
+
+    }
+    catch {}
+
   }
 
+
   return null;
+
 }
 
 
@@ -558,13 +809,17 @@ function normalizeResult(
 ) {
 
   const decisions = [
+
     "learning",
     "off_topic",
     "internal",
     "wrong_subject"
+
   ];
 
+
   const states = [
+
     "hint",
     "explanation",
     "answer",
@@ -572,23 +827,33 @@ function normalizeResult(
     "practice_check",
     "retry_explanation",
     "confirmation"
+
   ];
+
 
   let decision =
     parsed?.decision;
 
+
   if (
-    !decisions.includes(decision)
+    !decisions.includes(
+      decision
+    )
   ) {
+
     decision =
       "learning";
+
   }
+
 
   let answer =
     parsed?.answer;
 
+
   if (
-    typeof answer !== "string" ||
+    typeof answer !==
+      "string" ||
     !answer.trim()
   ) {
 
@@ -601,25 +866,33 @@ function normalizeResult(
         ""
       )
       .trim();
+
   }
+
 
   let nextState =
     parsed?.nextState;
 
+
   if (
-    !states.includes(nextState)
+    !states.includes(
+      nextState
+    )
   ) {
 
     nextState =
       currentState;
+
   }
 
 
   /*
    * 学習外
    */
+
   if (
-    decision === "off_topic"
+    decision ===
+      "off_topic"
   ) {
 
     answer =
@@ -627,14 +900,17 @@ function normalizeResult(
 
     nextState =
       "hint";
+
   }
 
 
   /*
    * 内部情報
    */
+
   if (
-    decision === "internal"
+    decision ===
+      "internal"
   ) {
 
     answer =
@@ -642,14 +918,17 @@ function normalizeResult(
 
     nextState =
       currentState;
+
   }
 
 
   /*
    * 教科違い
    */
+
   if (
-    decision === "wrong_subject"
+    decision ===
+      "wrong_subject"
   ) {
 
     answer =
@@ -657,32 +936,45 @@ function normalizeResult(
 
     nextState =
       currentState;
+
   }
 
 
   return {
+
     decision,
+
     answer,
+
     nextState
+
   };
+
 }
 
 
 /* =========================================================
-   Chat API
+   CHAT API
 ========================================================= */
 
 app.post(
   "/api/chat",
-  async (req, res) => {
+  async (
+    req,
+    res
+  ) => {
 
     try {
 
       if (!GROQ_API_KEY) {
 
-        return res.status(500).json({
+        return res.status(
+          500
+        ).json({
+
           error:
             "GROQ_API_KEYがRenderに設定されていません。"
+
         });
 
       }
@@ -690,13 +982,17 @@ app.post(
 
       const mode =
         String(
-          req.body?.mode || ""
+          req.body?.mode ||
+          ""
         ).trim();
+
 
       const subject =
         String(
-          req.body?.subject || ""
+          req.body?.subject ||
+          ""
         ).trim();
+
 
       const learningState =
         VALID_STATES.includes(
@@ -705,12 +1001,14 @@ app.post(
           ? req.body.learningState
           : "hint";
 
+
       const messages =
         Array.isArray(
           req.body?.messages
         )
           ? req.body.messages
           : [];
+
 
       const imageData =
         req.body?.imageData;
@@ -719,15 +1017,20 @@ app.post(
       const modeName =
         MODES[mode];
 
+
       const subjectName =
         SUBJECTS[subject];
 
 
       if (!modeName) {
 
-        return res.status(400).json({
+        return res.status(
+          400
+        ).json({
+
           error:
             "モードが正しくありません。"
+
         });
 
       }
@@ -735,19 +1038,21 @@ app.post(
 
       if (!subjectName) {
 
-        return res.status(400).json({
+        return res.status(
+          400
+        ).json({
+
           error:
             "教科が正しくありません。"
+
         });
 
       }
 
 
       /*
-       * 会話履歴。
-       *
-       * 保存はしない。
-       * 今回のリクエストにだけ使う。
+       * 会話は現在のセッションだけ。
+       * DBやファイルには保存しない。
        */
 
       const history =
@@ -758,8 +1063,10 @@ app.post(
               message &&
               message.content &&
               (
-                message.role === "user" ||
-                message.role === "assistant"
+                message.role ===
+                  "user" ||
+                message.role ===
+                  "assistant"
               )
           );
 
@@ -770,9 +1077,10 @@ app.post(
           "system",
 
         content:
+
           SYSTEM_PROMPT +
 
-          "\n\n------------------------\n" +
+          "\n\n" +
 
           "現在のモード：" +
           modeName +
@@ -787,26 +1095,28 @@ app.post(
 
           getStateInstruction(
             learningState
-          ) +
-
-          "\n------------------------"
+          )
 
       };
 
 
       const groqMessages = [
+
         systemMessage
+
       ];
 
 
       for (
-        const message of history
+        const message
+        of history
       ) {
 
         groqMessages.push({
 
           role:
-            message.role === "assistant"
+            message.role ===
+              "assistant"
               ? "assistant"
               : "user",
 
@@ -824,12 +1134,15 @@ app.post(
 
 
       /*
-       * 画像を最後のuserメッセージに付ける。
+       * 画像
        */
 
       if (
-        typeof imageData === "string" &&
-        imageData.startsWith("data:image/")
+        typeof imageData ===
+          "string" &&
+        imageData.startsWith(
+          "data:image/"
+        )
       ) {
 
         for (
@@ -840,65 +1153,90 @@ app.post(
         ) {
 
           if (
-            groqMessages[i].role === "user"
+            groqMessages[i].role ===
+              "user"
           ) {
 
             const text =
               groqMessages[i].content;
 
+
             groqMessages[i].content = [
 
               {
-                type: "text",
+
+                type:
+                  "text",
+
                 text:
                   text ||
                   "この画像を確認してください。"
+
               },
 
               {
-                type: "image_url",
+
+                type:
+                  "image_url",
+
                 image_url: {
-                  url: imageData
+
+                  url:
+                    imageData
+
                 }
+
               }
 
             ];
 
+
             break;
+
           }
+
         }
+
       }
 
 
       /*
-       * モデル候補取得
+       * モデル候補
        */
 
       const candidates =
         await getModelCandidates();
 
 
-      if (!candidates.length) {
+      if (
+        !candidates.length
+      ) {
 
-        return res.status(500).json({
+        return res.status(
+          500
+        ).json({
+
           error:
-            "現在利用可能な画像対応モデルを見つけられませんでした。\n\n" +
+            "現在利用可能な画像対応モデルが見つかりませんでした。\n\n" +
             "https://aistudychat.onrender.com/api/models\n" +
             "でモデル一覧を確認してください。"
+
         });
 
       }
 
 
-      let lastError = null;
+      let lastError =
+        null;
 
 
       /*
-       * 候補モデルを順番に試す。
+       * モデルを順番に試す。
        */
 
       for (
-        const model of candidates
+        const model
+        of candidates
       ) {
 
         try {
@@ -913,18 +1251,23 @@ app.post(
             await fetch(
               "https://api.groq.com/openai/v1/chat/completions",
               {
-                method: "POST",
+
+                method:
+                  "POST",
 
                 headers: {
+
                   Authorization:
                     `Bearer ${GROQ_API_KEY}`,
 
                   "Content-Type":
                     "application/json"
+
                 },
 
                 body:
                   JSON.stringify({
+
                     model,
 
                     messages:
@@ -935,7 +1278,9 @@ app.post(
 
                     max_tokens:
                       1200
+
                   })
+
               }
             );
 
@@ -946,17 +1291,27 @@ app.post(
 
           let data;
 
+
           try {
+
             data =
-              JSON.parse(raw);
-          } catch {
+              JSON.parse(
+                raw
+              );
+
+          }
+          catch {
+
             data = {
               raw
             };
+
           }
 
 
-          if (!response.ok) {
+          if (
+            !response.ok
+          ) {
 
             const message =
               data?.error?.message ||
@@ -966,10 +1321,14 @@ app.post(
 
 
             lastError = {
+
               model,
+
               status:
                 response.status,
+
               message
+
             };
 
 
@@ -980,16 +1339,22 @@ app.post(
 
 
             /*
-             * モデル関連なら次の候補。
+             * モデル関連エラーなら
+             * 次のモデルを試す。
              */
 
             if (
-              response.status === 404 ||
-              /model|vision|image|unsupported|not found|access/i.test(
-                message
-              )
+              response.status ===
+                404 ||
+
+              /model|vision|image|unsupported|not found|access/i
+                .test(
+                  message
+                )
             ) {
+
               continue;
+
             }
 
 
@@ -999,11 +1364,15 @@ app.post(
 
               error:
                 "Groq APIエラー\n" +
+
                 "モデル：" +
                 model +
+
                 "\nHTTP：" +
                 response.status +
+
                 "\n\n" +
+
                 message
 
             });
@@ -1018,16 +1387,24 @@ app.post(
               ?.content;
 
 
-          if (!rawAnswer) {
+          if (
+            !rawAnswer
+          ) {
 
             lastError = {
+
               model,
-              status: 500,
+
+              status:500,
+
               message:
                 "AIから回答が返ってきませんでした。"
+
             };
 
+
             continue;
+
           }
 
 
@@ -1053,6 +1430,7 @@ app.post(
             "AI decision:",
             result.decision
           );
+
 
           console.log(
             "AI nextState:",
@@ -1083,17 +1461,24 @@ app.post(
         catch (error) {
 
           lastError = {
+
             model,
-            status: 500,
+
+            status:500,
+
             message:
               error.message
+
           };
+
 
           console.error(
             "Model error:",
             error
           );
+
         }
+
       }
 
 
@@ -1101,7 +1486,9 @@ app.post(
        * 全モデル失敗
        */
 
-      return res.status(500).json({
+      return res.status(
+        500
+      ).json({
 
         error:
           "AI回答を取得できませんでした。\n\n" +
@@ -1122,7 +1509,9 @@ app.post(
       );
 
 
-      return res.status(500).json({
+      return res.status(
+        500
+      ).json({
 
         error:
           error.message ||
@@ -1137,12 +1526,15 @@ app.post(
 
 
 /* =========================================================
-   モデル一覧
+   モデル確認
 ========================================================= */
 
 app.get(
   "/api/models",
-  async (req, res) => {
+  async (
+    req,
+    res
+  ) => {
 
     try {
 
@@ -1153,6 +1545,7 @@ app.get(
       res.json({
 
         models:
+
           models.map(
             model => ({
 
@@ -1174,7 +1567,9 @@ app.get(
             })
           ),
 
+
         visionCandidates:
+
           getVisionCandidates(
             models
           )
@@ -1184,7 +1579,9 @@ app.get(
     }
     catch (error) {
 
-      res.status(500).json({
+      res.status(
+        500
+      ).json({
 
         error:
           error.message
@@ -1198,7 +1595,7 @@ app.get(
 
 
 /* =========================================================
-   静的HTML / JS
+   静的ファイル
 ========================================================= */
 
 app.use(
