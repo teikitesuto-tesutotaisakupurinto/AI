@@ -4,12 +4,17 @@ const crypto = require("crypto");
 const app = express();
 
 const PORT = process.env.PORT || 3000;
+
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
+
 const GROQ_MODEL =
   process.env.GROQ_MODEL ||
   "meta-llama/llama-4-scout-17b-16e-instruct";
 
-app.use(express.json({ limit: "15mb" }));
+app.use(express.json({
+  limit: "15mb"
+}));
+
 
 /* =========================================================
    HTML
@@ -17,10 +22,15 @@ app.use(express.json({ limit: "15mb" }));
 
 const HTML = `<!DOCTYPE html>
 <html lang="ja">
+
 <head>
+
 <meta charset="UTF-8">
-<meta name="viewport"
-      content="width=device-width,initial-scale=1,viewport-fit=cover">
+
+<meta
+  name="viewport"
+  content="width=device-width,initial-scale=1,viewport-fit=cover"
+>
 
 <title>AI学習チャット</title>
 
@@ -31,11 +41,12 @@ const HTML = `<!DOCTYPE html>
   -webkit-tap-highlight-color:transparent;
 }
 
-html,body{
+html,
+body{
   margin:0;
   padding:0;
   width:100%;
-  height:100%;
+  min-height:100%;
   font-family:
     -apple-system,
     BlinkMacSystemFont,
@@ -64,9 +75,10 @@ button{
   display:flex;
 }
 
-/* =========================
+
+/* =========================================================
    START
-========================= */
+========================================================= */
 
 #start{
   align-items:center;
@@ -95,7 +107,7 @@ button{
   height:68px;
   border:1px solid #ddd;
   border-radius:18px;
-  background:white;
+  background:#fff;
   font-size:20px;
   font-weight:600;
 }
@@ -105,9 +117,10 @@ button{
   background:#f0f0f0;
 }
 
-/* =========================
+
+/* =========================================================
    SUBJECT
-========================= */
+========================================================= */
 
 #subjects{
   position:relative;
@@ -156,9 +169,10 @@ button{
   font-size:25px;
 }
 
-/* =========================
+
+/* =========================================================
    CHAT
-========================= */
+========================================================= */
 
 #chat{
   flex-direction:column;
@@ -168,21 +182,28 @@ button{
 .chat-header{
   height:64px;
   flex:none;
+
   display:flex;
   align-items:center;
+
   padding:8px 12px;
+
   background:#fff;
   border-bottom:1px solid #e5e5e5;
+
   position:sticky;
   top:0;
+
   z-index:10;
 }
 
 .chat-back{
   width:42px;
   height:42px;
+
   border:0;
   background:transparent;
+
   font-size:24px;
 }
 
@@ -201,13 +222,16 @@ button{
   margin-top:2px;
 }
 
-/* =========================
-   ATTACHMENT
-========================= */
+
+/* =========================================================
+   ATTACH
+========================================================= */
 
 .attach-area{
   flex:none;
+
   padding:11px;
+
   background:#fff;
   border-bottom:1px solid #e5e5e5;
 }
@@ -224,10 +248,14 @@ button{
 
 .attach-button{
   flex:1;
+
   height:43px;
+
   border:1px solid #ddd;
   border-radius:11px;
+
   background:#fff;
+
   font-size:14px;
 }
 
@@ -242,29 +270,42 @@ button{
 
 .photo-preview img{
   display:block;
+
   max-width:100%;
   max-height:180px;
+
   border-radius:12px;
+
   border:1px solid #ddd;
 }
 
 .remove-photo{
   margin-top:6px;
+
   border:0;
   border-radius:8px;
+
   padding:7px 10px;
+
   background:#eee;
+
   font-size:12px;
 }
 
-/* =========================
-   MESSAGES
-========================= */
+
+/* =========================================================
+   CHAT BODY
+========================================================= */
 
 .chat-body{
   flex:1;
+
   overflow-y:auto;
-  padding:16px 10px 145px;
+
+  padding:
+    16px
+    10px
+    145px;
 }
 
 .messages{
@@ -287,44 +328,60 @@ button{
 
 .bubble{
   max-width:88%;
+
   padding:12px 15px;
+
   border-radius:17px;
+
   line-height:1.7;
+
   white-space:pre-wrap;
+
   word-break:break-word;
+
   font-size:15px;
 }
 
 .user .bubble{
   background:#222;
   color:#fff;
+
   border-bottom-right-radius:5px;
 }
 
 .ai .bubble{
   background:#fff;
+
   border:1px solid #e4e4e4;
+
   border-bottom-left-radius:5px;
 }
 
-/* =========================
-   ぽわぽわ
-========================= */
+
+/* =========================================================
+   THINKING
+========================================================= */
 
 .typing{
   height:42px;
   min-width:58px;
+
   display:flex;
+
   align-items:center;
   justify-content:center;
+
   gap:6px;
 }
 
 .dot{
   width:8px;
   height:8px;
+
   border-radius:50%;
+
   background:#777;
+
   animation:powa 1.1s infinite ease-in-out;
 }
 
@@ -338,7 +395,9 @@ button{
 
 @keyframes powa{
 
-  0%,70%,100%{
+  0%,
+  70%,
+  100%{
     transform:scale(.6);
     opacity:.35;
   }
@@ -350,52 +409,75 @@ button{
 
 }
 
-/* =========================
-   INPUT
-========================= */
+
+/* =========================================================
+   COMPOSER
+========================================================= */
 
 .composer{
   position:fixed;
+
   left:0;
   right:0;
   bottom:0;
+
   z-index:20;
+
   padding:
     9px
     10px
     calc(9px + env(safe-area-inset-bottom));
+
   background:rgba(255,255,255,.97);
+
   border-top:1px solid #ddd;
 }
 
 .composer-inner{
   width:min(760px,100%);
+
   margin:auto;
+
   display:flex;
+
   gap:8px;
+
   align-items:flex-end;
 }
 
 #input{
   flex:1;
+
   min-height:47px;
   max-height:140px;
+
   resize:none;
+
   border:1px solid #ccc;
+
   border-radius:14px;
+
   padding:11px 13px;
+
   outline:none;
+
   background:#fff;
+
   line-height:1.5;
 }
 
 #send{
   width:64px;
   height:47px;
+
   border:0;
+
   border-radius:14px;
+
   background:#222;
+
   color:#fff;
+
   font-weight:600;
 }
 
@@ -403,18 +485,25 @@ button{
   opacity:.45;
 }
 
-/* =========================
+
+/* =========================================================
    CROP
-========================= */
+========================================================= */
 
 #cropModal{
   display:none;
+
   position:fixed;
+
   inset:0;
+
   z-index:100;
+
   background:rgba(0,0,0,.75);
+
   align-items:center;
   justify-content:center;
+
   padding:14px;
 }
 
@@ -424,43 +513,60 @@ button{
 
 .crop-box{
   width:min(720px,100%);
+
   background:#fff;
+
   border-radius:18px;
+
   padding:15px;
 }
 
 .crop-title{
   font-size:18px;
+
   margin:0 0 12px;
 }
 
 .crop-stage{
   position:relative;
+
   height:min(65dvh,540px);
+
   background:#111;
+
   border-radius:12px;
+
   overflow:hidden;
+
   display:flex;
+
   align-items:center;
+
   justify-content:center;
 }
 
 #cropCanvas{
   max-width:100%;
   max-height:100%;
+
   touch-action:none;
 }
 
 .crop-buttons{
   display:flex;
+
   justify-content:flex-end;
+
   gap:8px;
+
   margin-top:12px;
 }
 
 .crop-buttons button{
   border:0;
+
   border-radius:10px;
+
   padding:11px 14px;
 }
 
@@ -471,6 +577,27 @@ button{
 .crop-use{
   background:#222;
   color:#fff;
+}
+
+
+/* =========================================================
+   ERROR
+========================================================= */
+
+.error-box{
+  color:#b00020;
+  background:#fff0f2;
+  border:1px solid #ffc4cc;
+
+  border-radius:12px;
+
+  padding:11px 13px;
+
+  white-space:pre-wrap;
+
+  font-size:13px;
+
+  line-height:1.6;
 }
 
 @media(max-width:600px){
@@ -486,11 +613,21 @@ button{
 }
 
 </style>
+
 </head>
+
 
 <body>
 
-<section id="start" class="screen active">
+
+<!-- =====================================================
+     START
+===================================================== -->
+
+<section
+  id="start"
+  class="screen active"
+>
 
   <div class="start-box">
 
@@ -502,13 +639,15 @@ button{
 
       <button
         class="mode-button"
-        data-mode="添削">
+        data-mode="添削"
+      >
         添削
       </button>
 
       <button
         class="mode-button"
-        data-mode="質問">
+        data-mode="質問"
+      >
         質問
       </button>
 
@@ -519,11 +658,19 @@ button{
 </section>
 
 
-<section id="subjects" class="screen">
+<!-- =====================================================
+     SUBJECT
+===================================================== -->
+
+<section
+  id="subjects"
+  class="screen"
+>
 
   <button
     class="back"
-    id="subjectBack">
+    id="subjectBack"
+  >
     ←
   </button>
 
@@ -531,38 +678,43 @@ button{
 
     <h1
       class="page-title"
-      id="subjectTitle">
-    </h1>
+      id="subjectTitle"
+    ></h1>
 
     <div class="subject-list">
 
       <button
         class="subject-button"
-        data-subject="国語">
+        data-subject="国語"
+      >
         国語
       </button>
 
       <button
         class="subject-button"
-        data-subject="数学">
+        data-subject="数学"
+      >
         数学
       </button>
 
       <button
         class="subject-button"
-        data-subject="社会">
+        data-subject="社会"
+      >
         社会
       </button>
 
       <button
         class="subject-button"
-        data-subject="理科">
+        data-subject="理科"
+      >
         理科
       </button>
 
       <button
         class="subject-button"
-        data-subject="英語">
+        data-subject="英語"
+      >
         英語
       </button>
 
@@ -573,13 +725,21 @@ button{
 </section>
 
 
-<section id="chat" class="screen">
+<!-- =====================================================
+     CHAT
+===================================================== -->
+
+<section
+  id="chat"
+  class="screen"
+>
 
   <header class="chat-header">
 
     <button
       class="chat-back"
-      id="chatBack">
+      id="chatBack"
+    >
       ←
     </button>
 
@@ -591,13 +751,15 @@ button{
 
       <div
         class="chat-sub"
-        id="chatSub">
-      </div>
+        id="chatSub"
+      ></div>
 
     </div>
 
   </header>
 
+
+  <!-- 写真 -->
 
   <div class="attach-area">
 
@@ -605,15 +767,18 @@ button{
 
       <div
         class="photo-preview"
-        id="photoPreview">
+        id="photoPreview"
+      >
 
         <img
           id="previewImage"
-          alt="添付画像">
+          alt="添付画像"
+        >
 
         <button
           class="remove-photo"
-          id="removePhoto">
+          id="removePhoto"
+        >
           写真を外す
         </button>
 
@@ -624,13 +789,15 @@ button{
 
         <button
           class="attach-button"
-          id="takePhoto">
+          id="takePhoto"
+        >
           写真を撮る
         </button>
 
         <button
           class="attach-button"
-          id="selectPhoto">
+          id="selectPhoto"
+        >
           写真を選択
         </button>
 
@@ -639,13 +806,15 @@ button{
           type="file"
           accept="image/*"
           capture="environment"
-          hidden>
+          hidden
+        >
 
         <input
           id="fileInput"
           type="file"
           accept="image/*"
-          hidden>
+          hidden
+        >
 
       </div>
 
@@ -654,17 +823,22 @@ button{
   </div>
 
 
+  <!-- チャット -->
+
   <div
     class="chat-body"
-    id="chatBody">
+    id="chatBody"
+  >
 
     <div
       class="messages"
-      id="messages">
-    </div>
+      id="messages"
+    ></div>
 
   </div>
 
+
+  <!-- 入力 -->
 
   <div class="composer">
 
@@ -673,10 +847,12 @@ button{
       <textarea
         id="input"
         rows="2"
-        placeholder="質問を入力…"></textarea>
+        placeholder="質問を入力…"
+      ></textarea>
 
       <button
-        id="send">
+        id="send"
+      >
         送信
       </button>
 
@@ -686,6 +862,10 @@ button{
 
 </section>
 
+
+<!-- =====================================================
+     CROP
+===================================================== -->
 
 <div id="cropModal">
 
@@ -697,7 +877,9 @@ button{
 
     <div class="crop-stage">
 
-      <canvas id="cropCanvas"></canvas>
+      <canvas
+        id="cropCanvas"
+      ></canvas>
 
     </div>
 
@@ -705,13 +887,15 @@ button{
 
       <button
         class="crop-cancel"
-        id="cropCancel">
+        id="cropCancel"
+      >
         キャンセル
       </button>
 
       <button
         class="crop-use"
-        id="cropUse">
+        id="cropUse"
+      >
         この範囲を使う
       </button>
 
@@ -724,24 +908,32 @@ button{
 
 <script>
 
+/* =========================================================
+   STATE
+========================================================= */
+
 const state = {
 
-  mode: null,
+  mode:null,
 
-  subject: null,
+  subject:null,
 
-  step: 1,
+  step:1,
 
-  messages: [],
+  messages:[],
 
-  imageData: null,
+  imageData:null,
 
-  answerIds: [],
+  answerIds:[],
 
-  waiting: false
+  waiting:false
 
 };
 
+
+/* =========================================================
+   ELEMENTS
+========================================================= */
 
 const start =
   document.getElementById("start");
@@ -789,37 +981,60 @@ const cropCanvas =
   document.getElementById("cropCanvas");
 
 
+/* =========================================================
+   SCREEN
+========================================================= */
+
 function showScreen(screen){
 
   document
     .querySelectorAll(".screen")
-    .forEach(x=>{
-      x.classList.remove("active");
+    .forEach(element=>{
+
+      element.classList.remove(
+        "active"
+      );
+
     });
 
-  screen.classList.add("active");
+  screen.classList.add(
+    "active"
+  );
 
 }
 
+
+/* =========================================================
+   MODE
+========================================================= */
 
 document
   .querySelectorAll("[data-mode]")
   .forEach(button=>{
 
-    button.addEventListener("click",()=>{
+    button.addEventListener(
+      "click",
+      ()=>{
 
-      state.mode =
-        button.dataset.mode;
+        state.mode =
+          button.dataset.mode;
 
-      subjectTitle.textContent =
-        state.mode;
+        subjectTitle.textContent =
+          state.mode;
 
-      showScreen(subjects);
+        showScreen(
+          subjects
+        );
 
-    });
+      }
+    );
 
   });
 
+
+/* =========================================================
+   BACK
+========================================================= */
 
 document
   .getElementById("subjectBack")
@@ -827,7 +1042,9 @@ document
 
     resetSession();
 
-    showScreen(start);
+    showScreen(
+      start
+    );
 
   };
 
@@ -838,64 +1055,90 @@ document
 
     resetSession();
 
-    showScreen(subjects);
+    showScreen(
+      subjects
+    );
 
   };
 
+
+/* =========================================================
+   SUBJECT
+========================================================= */
 
 document
   .querySelectorAll("[data-subject]")
   .forEach(button=>{
 
-    button.addEventListener("click",()=>{
+    button.addEventListener(
+      "click",
+      ()=>{
 
-      state.subject =
-        button.dataset.subject;
+        state.subject =
+          button.dataset.subject;
 
-      state.step = 1;
+        state.step = 1;
 
-      state.messages = [];
+        state.messages = [];
 
-      state.imageData = null;
+        state.imageData = null;
 
-      state.answerIds = [];
+        state.answerIds = [];
 
-      state.waiting = false;
+        state.waiting = false;
 
-      messages.innerHTML = "";
+        messages.innerHTML =
+          "";
 
-      input.value = "";
+        input.value =
+          "";
 
-      clearPhoto();
+        clearPhoto();
 
-      chatSub.textContent =
-        state.subject +
-        " ・ " +
-        state.mode;
+        chatSub.textContent =
+          state.subject +
+          " ・ " +
+          state.mode;
 
-      addAI(
-        "問題や質問を送ってね。"
-      );
+        addAI(
+          "問題や質問を送ってね。"
+        );
 
-      showScreen(chat);
+        showScreen(
+          chat
+        );
 
-      input.focus();
+        input.focus();
 
-    });
+      }
+    );
 
   });
 
 
-function addMessage(text,type){
+/* =========================================================
+   MESSAGE
+========================================================= */
+
+function addMessage(
+  text,
+  type
+){
 
   const row =
-    document.createElement("div");
+    document.createElement(
+      "div"
+    );
 
   row.className =
-    "message " + type;
+    "message " +
+    type;
+
 
   const bubble =
-    document.createElement("div");
+    document.createElement(
+      "div"
+    );
 
   bubble.className =
     "bubble";
@@ -903,9 +1146,14 @@ function addMessage(text,type){
   bubble.textContent =
     text;
 
-  row.appendChild(bubble);
 
-  messages.appendChild(row);
+  row.appendChild(
+    bubble
+  );
+
+  messages.appendChild(
+    row
+  );
 
   scrollBottom();
 
@@ -934,35 +1182,58 @@ function addUser(text){
 }
 
 
+/* =========================================================
+   THINKING
+========================================================= */
+
 function showThinking(){
 
   const row =
-    document.createElement("div");
+    document.createElement(
+      "div"
+    );
 
   row.className =
     "message ai";
 
+
   const bubble =
-    document.createElement("div");
+    document.createElement(
+      "div"
+    );
 
   bubble.className =
     "bubble typing";
 
-  for(let i=0;i<3;i++){
+
+  for(
+    let i=0;
+    i<3;
+    i++
+  ){
 
     const dot =
-      document.createElement("span");
+      document.createElement(
+        "span"
+      );
 
     dot.className =
       "dot";
 
-    bubble.appendChild(dot);
+    bubble.appendChild(
+      dot
+    );
 
   }
 
-  row.appendChild(bubble);
 
-  messages.appendChild(row);
+  row.appendChild(
+    bubble
+  );
+
+  messages.appendChild(
+    row
+  );
 
   scrollBottom();
 
@@ -973,18 +1244,20 @@ function showThinking(){
 
 function scrollBottom(){
 
-  requestAnimationFrame(()=>{
+  requestAnimationFrame(
+    ()=>{
 
-    chatBody.scrollTop =
-      chatBody.scrollHeight;
+      chatBody.scrollTop =
+        chatBody.scrollHeight;
 
-  });
+    }
+  );
 
 }
 
 
 /* =========================================================
-   写真
+   PHOTO
 ========================================================= */
 
 document
@@ -1006,20 +1279,20 @@ document
 
 
 cameraInput.onchange =
-  e=>{
+  event=>{
 
     handleImage(
-      e.target.files[0]
+      event.target.files[0]
     );
 
   };
 
 
 fileInput.onchange =
-  e=>{
+  event=>{
 
     handleImage(
-      e.target.files[0]
+      event.target.files[0]
     );
 
   };
@@ -1049,7 +1322,12 @@ function handleImage(file){
 
   }
 
-  if(!file.type.startsWith("image/")){
+
+  if(
+    !file.type.startsWith(
+      "image/"
+    )
+  ){
 
     alert(
       "画像を選択してください。"
@@ -1059,8 +1337,10 @@ function handleImage(file){
 
   }
 
+
   const reader =
     new FileReader();
+
 
   reader.onload=()=>{
 
@@ -1070,29 +1350,36 @@ function handleImage(file){
     cropImage =
       new Image();
 
+
     cropImage.onload=()=>{
 
       openCrop();
 
     };
 
+
     cropImage.src =
       cropSource;
 
   };
 
-  reader.readAsDataURL(file);
+
+  reader.readAsDataURL(
+    file
+  );
 
 }
 
 
 /* =========================================================
-   画像切り取り
+   CROP
 ========================================================= */
 
 function openCrop(){
 
-  cropModal.classList.add("show");
+  cropModal.classList.add(
+    "show"
+  );
 
   setupCropCanvas();
 
@@ -1113,15 +1400,18 @@ function setupCropCanvas(){
       520
     );
 
+
   const ratio =
     cropImage.naturalWidth /
     cropImage.naturalHeight;
+
 
   let w =
     maxW;
 
   let h =
     w / ratio;
+
 
   if(h > maxH){
 
@@ -1133,23 +1423,26 @@ function setupCropCanvas(){
 
   }
 
+
   cropCanvas.width =
     Math.round(w);
 
   cropCanvas.height =
     Math.round(h);
 
+
   cropRect = {
 
-    x: w * .08,
+    x:w * .08,
 
-    y: h * .08,
+    y:h * .08,
 
-    width: w * .84,
+    width:w * .84,
 
-    height: h * .84
+    height:h * .84
 
   };
+
 
   drawCrop();
 
@@ -1159,7 +1452,9 @@ function setupCropCanvas(){
 function drawCrop(){
 
   const ctx =
-    cropCanvas.getContext("2d");
+    cropCanvas.getContext(
+      "2d"
+    );
 
   const w =
     cropCanvas.width;
@@ -1167,12 +1462,14 @@ function drawCrop(){
   const h =
     cropCanvas.height;
 
+
   ctx.clearRect(
     0,
     0,
     w,
     h
   );
+
 
   ctx.drawImage(
     cropImage,
@@ -1182,8 +1479,10 @@ function drawCrop(){
     h
   );
 
+
   ctx.fillStyle =
     "rgba(0,0,0,.48)";
+
 
   ctx.beginPath();
 
@@ -1205,11 +1504,13 @@ function drawCrop(){
     "evenodd"
   );
 
+
   ctx.strokeStyle =
     "#fff";
 
   ctx.lineWidth =
     2;
+
 
   ctx.strokeRect(
     cropRect.x,
@@ -1222,32 +1523,41 @@ function drawCrop(){
 
 
 /* =========================================================
-   切り取り移動
+   CROP MOVE
 ========================================================= */
 
-function pointerPosition(event){
+function pointerPosition(
+  event
+){
 
   const rect =
     cropCanvas.getBoundingClientRect();
+
 
   const scaleX =
     cropCanvas.width /
     rect.width;
 
+
   const scaleY =
     cropCanvas.height /
     rect.height;
 
+
   return {
 
     x:
-      (event.clientX -
-       rect.left) *
+      (
+        event.clientX -
+        rect.left
+      ) *
       scaleX,
 
     y:
-      (event.clientY -
-       rect.top) *
+      (
+        event.clientY -
+        rect.top
+      ) *
       scaleY
 
   };
@@ -1260,16 +1570,25 @@ cropCanvas.addEventListener(
   event=>{
 
     const p =
-      pointerPosition(event);
+      pointerPosition(
+        event
+      );
+
 
     if(
       p.x >= cropRect.x &&
-      p.x <= cropRect.x + cropRect.width &&
+      p.x <=
+        cropRect.x +
+        cropRect.width &&
       p.y >= cropRect.y &&
-      p.y <= cropRect.y + cropRect.height
+      p.y <=
+        cropRect.y +
+        cropRect.height
     ){
 
-      dragging = true;
+      dragging =
+        true;
+
 
       dragStart = {
 
@@ -1282,6 +1601,7 @@ cropCanvas.addEventListener(
           cropRect.y
 
       };
+
 
       cropCanvas.setPointerCapture(
         event.pointerId
@@ -1303,16 +1623,22 @@ cropCanvas.addEventListener(
 
     }
 
+
     const p =
-      pointerPosition(event);
+      pointerPosition(
+        event
+      );
+
 
     let x =
       p.x -
       dragStart.x;
 
+
     let y =
       p.y -
       dragStart.y;
+
 
     x =
       Math.max(
@@ -1324,6 +1650,7 @@ cropCanvas.addEventListener(
         )
       );
 
+
     y =
       Math.max(
         0,
@@ -1334,11 +1661,13 @@ cropCanvas.addEventListener(
         )
       );
 
+
     cropRect.x =
       x;
 
     cropRect.y =
       y;
+
 
     drawCrop();
 
@@ -1349,13 +1678,14 @@ cropCanvas.addEventListener(
 cropCanvas.addEventListener(
   "pointerup",
   ()=>{
-    dragging = false;
+    dragging =
+      false;
   }
 );
 
 
 /* =========================================================
-   切り取り確定
+   CROP USE
 ========================================================= */
 
 document
@@ -1363,21 +1693,20 @@ document
   .onclick=()=>{
 
     const output =
-      document.createElement("canvas");
+      document.createElement(
+        "canvas"
+      );
 
-    const sourceW =
-      cropImage.naturalWidth;
-
-    const sourceH =
-      cropImage.naturalHeight;
 
     const scaleX =
-      sourceW /
+      cropImage.naturalWidth /
       cropCanvas.width;
 
+
     const scaleY =
-      sourceH /
+      cropImage.naturalHeight /
       cropCanvas.height;
+
 
     output.width =
       Math.min(
@@ -1388,6 +1717,7 @@ document
         )
       );
 
+
     output.height =
       Math.min(
         1600,
@@ -1397,20 +1727,28 @@ document
         )
       );
 
+
     const ctx =
-      output.getContext("2d");
+      output.getContext(
+        "2d"
+      );
+
 
     ctx.drawImage(
 
       cropImage,
 
-      cropRect.x * scaleX,
+      cropRect.x *
+        scaleX,
 
-      cropRect.y * scaleY,
+      cropRect.y *
+        scaleY,
 
-      cropRect.width * scaleX,
+      cropRect.width *
+        scaleX,
 
-      cropRect.height * scaleY,
+      cropRect.height *
+        scaleY,
 
       0,
 
@@ -1422,28 +1760,34 @@ document
 
     );
 
+
     state.imageData =
       output.toDataURL(
         "image/jpeg",
         .82
       );
 
+
     previewImage.src =
       state.imageData;
+
 
     photoPreview.classList.add(
       "show"
     );
 
+
     cropModal.classList.remove(
       "show"
     );
 
-    cropSource = null;
+
+    cropSource =
+      null;
+
 
     /*
-     * 質問入力欄は変更しない。
-     * 写真操作前に入力していた文章を保持。
+     * 入力内容は変更しない。
      */
 
     input.focus();
@@ -1459,14 +1803,20 @@ document
       "show"
     );
 
-    cropSource = null;
+    cropSource =
+      null;
 
   };
 
 
+/* =========================================================
+   REMOVE PHOTO
+========================================================= */
+
 document
   .getElementById("removePhoto")
-  .onclick=clearPhoto;
+  .onclick=
+    clearPhoto;
 
 
 function clearPhoto(){
@@ -1474,23 +1824,31 @@ function clearPhoto(){
   state.imageData =
     null;
 
-  previewImage.removeAttribute(
-    "src"
-  );
 
-  photoPreview.classList.remove(
-    "show"
-  );
+  previewImage
+    .removeAttribute(
+      "src"
+    );
 
-  cameraInput.value = "";
 
-  fileInput.value = "";
+  photoPreview
+    .classList
+    .remove(
+      "show"
+    );
+
+
+  cameraInput.value =
+    "";
+
+  fileInput.value =
+    "";
 
 }
 
 
 /* =========================================================
-   送信
+   SEND
 ========================================================= */
 
 send.onclick =
@@ -1502,7 +1860,8 @@ input.addEventListener(
   event=>{
 
     if(
-      event.key === "Enter" &&
+      event.key ===
+        "Enter" &&
       !event.shiftKey
     ){
 
@@ -1524,8 +1883,10 @@ async function sendMessage(){
 
   }
 
+
   const text =
     input.value.trim();
+
 
   if(
     !text &&
@@ -1536,8 +1897,10 @@ async function sendMessage(){
 
   }
 
+
   let display =
     text;
+
 
   if(state.imageData){
 
@@ -1555,7 +1918,16 @@ async function sendMessage(){
 
   }
 
-  addUser(display);
+
+  addUser(
+    display
+  );
+
+
+  /*
+   * セッション中だけ保持。
+   * localStorage等には保存しない。
+   */
 
   state.messages.push({
 
@@ -1567,19 +1939,22 @@ async function sendMessage(){
 
   });
 
-  /*
-   * 質問入力は送信後に空にする。
-   * 写真選択・切り取りの途中では消さない。
-   */
 
-  input.value = "";
+  input.value =
+    "";
 
-  state.waiting = true;
 
-  send.disabled = true;
+  state.waiting =
+    true;
+
+
+  send.disabled =
+    true;
+
 
   const thinking =
     showThinking();
+
 
   try{
 
@@ -1635,6 +2010,7 @@ async function sendMessage(){
 
     thinking.remove();
 
+
     addAI(
       data.answer
     );
@@ -1659,10 +2035,6 @@ async function sendMessage(){
     }
 
 
-    /*
-     * STEP 1 → STEP 2 → STEP 3
-     */
-
     if(state.step < 3){
 
       state.step++;
@@ -1675,13 +2047,61 @@ async function sendMessage(){
 
   }catch(error){
 
-    console.error(error);
+    console.error(
+      error
+    );
+
 
     thinking.remove();
 
+
     addAI(
-      "ごめん、うまくつながらなかったみたい。\\nもう一度送ってみて。"
+      "AIとの接続でエラーが発生しました。"
     );
+
+
+    /*
+     * 詳細は開発時だけ表示。
+     */
+
+    const errorRow =
+      document.createElement(
+        "div"
+      );
+
+    errorRow.className =
+      "message ai";
+
+
+    const errorBox =
+      document.createElement(
+        "div"
+      );
+
+    errorBox.className =
+      "error-box";
+
+
+    errorBox.textContent =
+      "エラー詳細：\\n" +
+      (
+        error.message ||
+        "不明なエラー"
+      );
+
+
+    errorRow.appendChild(
+      errorBox
+    );
+
+
+    messages.appendChild(
+      errorRow
+    );
+
+
+    scrollBottom();
+
 
   }finally{
 
@@ -1699,28 +2119,38 @@ async function sendMessage(){
 
 
 /* =========================================================
-   セッション
+   RESET
 ========================================================= */
 
 function resetSession(){
 
-  state.mode = null;
+  state.mode =
+    null;
 
-  state.subject = null;
+  state.subject =
+    null;
 
-  state.step = 1;
+  state.step =
+    1;
 
-  state.messages = [];
+  state.messages =
+    [];
 
-  state.imageData = null;
+  state.imageData =
+    null;
 
-  state.answerIds = [];
+  state.answerIds =
+    [];
 
-  state.waiting = false;
+  state.waiting =
+    false;
 
-  messages.innerHTML = "";
 
-  input.value = "";
+  messages.innerHTML =
+    "";
+
+  input.value =
+    "";
 
   clearPhoto();
 
@@ -1743,19 +2173,22 @@ window.addEventListener(
 ========================================================= */
 
 const SYSTEM_PROMPT = `
-あなたは中学生向けの「AI学習チャット」の先生です。
+
+あなたは中学生向けのAI学習チャットの先生です。
 
 【話し方】
+
 ・中学生に自然に伝わる言葉を使う。
 ・優しいが、子ども扱いしない。
 ・上から目線にしない。
 ・「こんなの簡単」「なんで分からない」などと言わない。
-・「うざい」と感じるような過剰な褒め方をしない。
+・過剰に褒めない。
 ・短く分かりやすく説明する。
-・生徒が間違えても責めない。
-・生徒が分からなければ別の説明方法に変える。
+・間違いを責めない。
+・分からなければ別の説明方法に変える。
 
 【最重要：最低3段階】
+
 一つの回答でヒント・解説・答えを全部出してはいけません。
 
 STEP 1：
@@ -1766,320 +2199,552 @@ STEP 1：
 STEP 2：
 解説。
 STEP1より具体的に説明する。
-必要なら途中式や考え方を示す。
+途中式や考え方を示してよい。
 ただし最終的な答えはまだ出さない。
 
 STEP 3：
 答え。
-正しい答えと、考え方を整理する。
+正しい答えと考え方を整理する。
 
 現在指定されているSTEPだけを返してください。
 
 【STEP3の後】
+
 練習問題を1問出してください。
 
 【練習問題】
+
 生徒が回答したら理解度を確認してください。
 
-正解：
-短く正解を伝えて、理解できたことを確認してください。
+正解なら、
+短く正解を伝えてください。
 
-不正解・理解不足：
+不正解または理解不足なら、
+
 1. 要点をもう一度説明
 2. 確認テストを出す
 3. 再挑戦させる
 
-確認テストでも分からなければ、さらに簡単な説明に変えてください。
+確認テストでも分からなければ、
+さらに簡単な説明に変えてください。
 
 【添削】
-答案・ノート・作文などの画像を確認してください。
-良いところ、間違い、直すポイントを確認します。
-ただし最初から全部答えを出さず、段階的に進めます。
+
+答案、ノート、作文などの画像を確認してください。
+
+良いところ、
+間違っているところ、
+直すポイント
+
+を確認してください。
+
+ただし最初から全部答えを出さず、
+段階的に進めてください。
 
 【画像】
-画像がある場合は画像の内容を確認してください。
-数学の問題、答案、英作文、国語の記述などを読み取ってください。
+
+画像がある場合は、
+画像の内容を確認してください。
+
+数学の問題、
+答案、
+英作文、
+国語の記述などを読み取ってください。
+
 読めない部分は推測しないでください。
+
 `;
 
 
 /* =========================================================
-   GROQ API
+   API
 ========================================================= */
 
-app.post("/api/chat", async (req, res) => {
+app.post(
+  "/api/chat",
+  async (req,res)=>{
 
-  try {
+    try{
 
-    if (!GROQ_API_KEY) {
+      /*
+       * API KEY確認
+       */
 
-      return res.status(500).json({
-        error:
-          "GROQ_API_KEY がRenderのEnvironment Variablesに設定されていません。"
-      });
+      if(!GROQ_API_KEY){
 
-    }
+        return res.status(500).json({
 
+          error:
+            "GROQ_API_KEY が設定されていません。Renderの Environment Variables を確認してください。"
 
-    const {
-      mode,
-      subject,
-      step,
-      messages,
-      imageData
-    } = req.body || {};
-
-
-    const subjects = [
-      "国語",
-      "数学",
-      "社会",
-      "理科",
-      "英語"
-    ];
-
-
-    if (!subjects.includes(subject)) {
-
-      return res.status(400).json({
-        error: "教科が正しくありません。"
-      });
-
-    }
-
-
-    if (
-      mode !== "質問" &&
-      mode !== "添削"
-    ) {
-
-      return res.status(400).json({
-        error: "モードが正しくありません。"
-      });
-
-    }
-
-
-    const history =
-      Array.isArray(messages)
-        ? messages.slice(-14)
-        : [];
-
-
-    const currentStep =
-      Number(step) === 2
-        ? "STEP 2：解説"
-        : Number(step) >= 3
-          ? "STEP 3：答え・その後は練習問題"
-          : "STEP 1：ヒント";
-
-
-    const groqMessages = [
-
-      {
-        role: "system",
-        content:
-          SYSTEM_PROMPT +
-          "\n\n現在の教科：" +
-          subject +
-          "\n現在のモード：" +
-          mode +
-          "\n現在の段階：" +
-          currentStep
-      }
-
-    ];
-
-
-    for (
-      const message of history
-    ) {
-
-      if (
-        !message ||
-        !message.content
-      ) {
-
-        continue;
+        });
 
       }
 
 
-      groqMessages.push({
-
-        role:
-          message.role === "assistant"
-            ? "assistant"
-            : "user",
-
-        content:
-          String(
-            message.content
-          ).slice(
-            0,
-            12000
-          )
-
-      });
-
-    }
+      const {
+        mode,
+        subject,
+        step,
+        messages,
+        imageData
+      } =
+        req.body || {};
 
 
-    /*
-     * 画像がある場合、
-     * 最後のuserメッセージへ画像を追加。
-     */
-
-    if (
-      imageData &&
-      typeof imageData === "string" &&
-      imageData.startsWith("data:image/")
-    ) {
-
-      for (
-        let i =
-          groqMessages.length - 1;
-        i >= 0;
-        i--
-      ) {
-
-        if (
-          groqMessages[i].role === "user"
-        ) {
-
-          const text =
-            groqMessages[i].content;
+      const allowedSubjects = [
+        "国語",
+        "数学",
+        "社会",
+        "理科",
+        "英語"
+      ];
 
 
-          groqMessages[i].content = [
+      if(
+        !allowedSubjects.includes(
+          subject
+        )
+      ){
 
-            {
-              type: "text",
-              text:
-                text ||
-                "この画像を確認してください。"
-            },
+        return res.status(400).json({
 
-            {
-              type: "image_url",
-              image_url: {
-                url: imageData
-              }
-            }
+          error:
+            "教科が正しくありません。"
 
-          ];
-
-          break;
-
-        }
+        });
 
       }
 
-    }
+
+      if(
+        mode !== "質問" &&
+        mode !== "添削"
+      ){
+
+        return res.status(400).json({
+
+          error:
+            "モードが正しくありません。"
+
+        });
+
+      }
 
 
-    const groqResponse =
-      await fetch(
-        "https://api.groq.com/openai/v1/chat/completions",
+      /*
+       * 会話は直近だけ。
+       * サーバーには保存しない。
+       */
+
+      const history =
+        Array.isArray(
+          messages
+        )
+          ? messages.slice(-14)
+          : [];
+
+
+      let currentStep;
+
+
+      if(
+        Number(step) === 2
+      ){
+
+        currentStep =
+          "STEP 2：解説";
+
+      }
+      else if(
+        Number(step) >= 3
+      ){
+
+        currentStep =
+          "STEP 3：答え。その後は練習問題";
+
+      }
+      else{
+
+        currentStep =
+          "STEP 1：ヒント";
+
+      }
+
+
+      const groqMessages = [
+
         {
 
-          method: "POST",
+          role:"system",
 
-          headers: {
+          content:
+            SYSTEM_PROMPT +
 
-            "Authorization":
-              `Bearer ${GROQ_API_KEY}`,
+            "\n\n現在の教科：" +
+            subject +
 
-            "Content-Type":
-              "application/json"
+            "\n現在のモード：" +
+            mode +
 
-          },
+            "\n現在の段階：" +
+            currentStep
 
-          body:
-            JSON.stringify({
+        }
 
-              model:
-                GROQ_MODEL,
+      ];
 
-              messages:
-                groqMessages,
 
-              temperature:
-                0.45,
+      /*
+       * 会話履歴をGroqへ渡す。
+       */
 
-              max_tokens:
-                1000
+      for(
+        const message
+        of history
+      ){
 
-            })
+        if(
+          !message ||
+          !message.content
+        ){
 
+          continue;
+
+        }
+
+
+        groqMessages.push({
+
+          role:
+            message.role ===
+              "assistant"
+              ? "assistant"
+              : "user",
+
+          content:
+            String(
+              message.content
+            ).slice(
+              0,
+              12000
+            )
+
+        });
+
+      }
+
+
+      /*
+       * 画像がある場合。
+       */
+
+      if(
+        imageData &&
+        typeof imageData === "string" &&
+        imageData.startsWith(
+          "data:image/"
+        )
+      ){
+
+        let foundUser =
+          false;
+
+
+        for(
+          let i =
+            groqMessages.length - 1;
+          i >= 0;
+          i--
+        ){
+
+          if(
+            groqMessages[i].role ===
+              "user"
+          ){
+
+            const text =
+              groqMessages[i].content;
+
+
+            groqMessages[i].content = [
+
+              {
+
+                type:"text",
+
+                text:
+                  text ||
+                  "この画像を確認してください。"
+
+              },
+
+              {
+
+                type:"image_url",
+
+                image_url:{
+
+                  url:imageData
+
+                }
+
+              }
+
+            ];
+
+
+            foundUser =
+              true;
+
+
+            break;
+
+          }
+
+        }
+
+
+        if(!foundUser){
+
+          groqMessages.push({
+
+            role:"user",
+
+            content:[
+
+              {
+
+                type:"text",
+
+                text:
+                  "この画像を確認してください。"
+
+              },
+
+              {
+
+                type:"image_url",
+
+                image_url:{
+                  url:imageData
+                }
+
+              }
+
+            ]
+
+          });
+
+        }
+
+      }
+
+
+      console.log(
+        "Groq request:",
+        {
+          model:GROQ_MODEL,
+          subject,
+          mode,
+          step,
+          hasImage:
+            Boolean(imageData)
         }
       );
 
 
-    const data =
-      await groqResponse.json();
+      /*
+       * Groq
+       */
+
+      const groqResponse =
+        await fetch(
+          "https://api.groq.com/openai/v1/chat/completions",
+          {
+
+            method:"POST",
+
+            headers:{
+
+              "Authorization":
+                "Bearer " +
+                GROQ_API_KEY,
+
+              "Content-Type":
+                "application/json"
+
+            },
+
+            body:
+              JSON.stringify({
+
+                model:
+                  GROQ_MODEL,
+
+                messages:
+                  groqMessages,
+
+                temperature:
+                  0.45,
+
+                max_tokens:
+                  1000
+
+              })
+
+          }
+        );
 
 
-    if (!groqResponse.ok) {
+      const rawText =
+        await groqResponse.text();
+
+
+      let data;
+
+
+      try{
+
+        data =
+          JSON.parse(
+            rawText
+          );
+
+      }
+      catch{
+
+        data = {
+          raw:rawText
+        };
+
+      }
+
+
+      /*
+       * Groqエラー
+       */
+
+      if(
+        !groqResponse.ok
+      ){
+
+        console.error(
+          "========== GROQ ERROR =========="
+        );
+
+        console.error(
+          "HTTP:",
+          groqResponse.status
+        );
+
+        console.error(
+          "MODEL:",
+          GROQ_MODEL
+        );
+
+        console.error(
+          "RESPONSE:",
+          data
+        );
+
+        console.error(
+          "================================"
+        );
+
+
+        return res.status(
+          groqResponse.status
+        ).json({
+
+          error:
+            "Groq APIエラー\n" +
+
+            "HTTP " +
+            groqResponse.status +
+            "\n\n" +
+
+            (
+              data?.error?.message ||
+              data?.message ||
+              data?.raw ||
+              "Groqから詳細なエラーが返りませんでした。"
+            )
+
+        });
+
+      }
+
+
+      const answer =
+        data
+          ?.choices?.[0]
+          ?.message
+          ?.content;
+
+
+      if(!answer){
+
+        console.error(
+          "Groq response without answer:",
+          data
+        );
+
+
+        return res.status(500).json({
+
+          error:
+            "Groqから回答が返ってきませんでした。"
+
+        });
+
+      }
+
+
+      const answerId =
+        data.id ||
+        crypto.randomUUID();
+
+
+      res.json({
+
+        id:
+          answerId,
+
+        answer:
+          answer
+
+      });
+
+
+    }
+    catch(error){
 
       console.error(
-        "Groq API error:",
-        data
+        "========== SERVER ERROR =========="
+      );
+
+      console.error(
+        error
+      );
+
+      console.error(
+        "=================================="
       );
 
 
-      return res.status(
-        groqResponse.status
-      ).json({
+      res.status(500).json({
 
         error:
-          data?.error?.message ||
-          "Groq APIでエラーが発生しました。"
+          error.message ||
+          "サーバー側でエラーが発生しました。"
 
       });
 
     }
 
-
-    const answer =
-      data?.choices?.[0]?.message?.content ||
-      "回答を取得できませんでした。";
-
-
-    const answerId =
-      data.id ||
-      crypto.randomUUID();
-
-
-    res.json({
-
-      id:
-        answerId,
-
-      answer:
-        answer
-
-    });
-
-
-  } catch (error) {
-
-    console.error(
-      "Server error:",
-      error
-    );
-
-
-    res.status(500).json({
-
-      error:
-        "サーバー側でエラーが発生しました。"
-
-    });
-
   }
-
-});
+);
 
 
 /* =========================================================
@@ -2087,17 +2752,28 @@ app.post("/api/chat", async (req, res) => {
 ========================================================= */
 
 /*
- * Express 5では app.get("*") を使わない。
- * これで今回の PathError を回避。
+ * Express 5では
+ *
+ * app.get("*")
+ *
+ * を使わない。
+ *
+ * app.useで最後に受ける。
  */
 
-app.use((req, res) => {
+app.use(
+  (req,res)=>{
 
-  res.type("html");
+    res.type(
+      "html"
+    );
 
-  res.send(HTML);
+    res.send(
+      HTML
+    );
 
-});
+  }
+);
 
 
 /* =========================================================
@@ -2106,14 +2782,35 @@ app.use((req, res) => {
 
 app.listen(
   PORT,
-  () => {
+  ()=>{
 
     console.log(
-      `AI学習チャット running on port ${PORT}`
+      "================================"
     );
 
     console.log(
-      `Groq model: ${GROQ_MODEL}`
+      "AI学習チャット起動"
+    );
+
+    console.log(
+      "PORT:",
+      PORT
+    );
+
+    console.log(
+      "MODEL:",
+      GROQ_MODEL
+    );
+
+    console.log(
+      "API KEY:",
+      GROQ_API_KEY
+        ? "設定済み"
+        : "未設定"
+    );
+
+    console.log(
+      "================================"
     );
 
   }
