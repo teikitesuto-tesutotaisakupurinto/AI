@@ -1,15 +1,231 @@
 const express = require("express");
-const crypto = require("crypto");
 
 const app = express();
 
 const PORT = process.env.PORT || 3000;
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
-const GROQ_MODEL =
-  process.env.GROQ_MODEL ||
-  "meta-llama/llama-4-scout-17b-16e-instruct";
+const MANUAL_MODEL = process.env.GROQ_MODEL || "";
 
 app.use(express.json({ limit: "15mb" }));
+
+/* =========================================================
+   GROQ MODEL
+========================================================= */
+
+let cachedModels = null;
+let cachedModelsAt = 0;
+
+async function getGroqModels() {
+
+  if (!GROQ_API_KEY) {
+    throw new Error("GROQ_API_KEYが設定されていません。");
+  }
+
+  const now = Date.now();
+
+  if (cachedModels && now - cachedModelsAt < 5 * 60 * 1000) {
+    return cachedModels;
+  }
+
+  const response = await fetch(
+    "https://api.groq.com/openai/v1/models",
+    {
+      headers: {
+        Authorization: `Bearer ${GROQ_API_KEY}`
+      }
+    }
+  );
+
+  const text = await response.text();
+
+  let data;
+
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error(
+      "Groqのモデル一覧を取得できませんでした。\n" + text
+    );
+  }
+
+  if (!response.ok) {
+    throw new Error(
+      data?.error?.message ||
+      "Groqのモデル一覧取得に失敗しました。"
+    );
+  }
+
+  cachedModels = Array.isArray(data.data)
+    ? data.data
+    : [];
+
+  cachedModelsAt = now;
+
+  return cachedModels;
+}
+
+
+/*
+ * 画像を扱えそうなモデルを優先。
+ *
+ * モデル名は固定しない。
+ */
+function getVisionCandidates(models) {
+
+  const keywords = [
+    "vision",
+    "vl",
+    "scout",
+    "maverick",
+    "qwen"
+  ];
+
+  return models
+    .map(model => model.id)
+    .filter(Boolean)
+    .filter(id => {
+
+      const name = id.toLowerCase();
+
+      return keywords.some(
+        keyword => name.includes(keyword)
+      );
+
+    });
+}
+
+
+/*
+ * 手動指定があればそれを最優先。
+ */
+async function getModelCandidates() {
+
+  const models = await getGroqModels();
+
+  const available =
+    models.map(model => model.id).filter(Boolean);
+
+  if (MANUAL_MODEL) {
+
+    if (available.includes(MANUAL_MODEL)) {
+      return [MANUAL_MODEL];
+    }
+
+    throw new Error(
+      "GROQ_MODELに指定されたモデルが現在利用できません。\n" +
+      "指定モデル: " +
+      MANUAL_MODEL +
+      "\n\n利用可能モデル:\n" +
+      available.join("\n")
+    );
+  }
+
+  const vision =
+    getVisionCandidates(models);
+
+  /*
+   * Vision候補を優先。
+   * それでもなければ一覧を返す。
+   */
+  if (vision.length) {
+    return vision;
+  }
+
+  return [];
+}
+
+
+/* =========================================================
+   SYSTEM PROMPT
+========================================================= */
+
+const SYSTEM_PROMPT = `
+あなたは中学生向けのAI学習チャットの先生です。
+
+【話し方】
+
+・中学生に自然に伝わる言葉を使う。
+・優しいが、子ども扱いしない。
+・上から目線にしない。
+・「こんなの簡単」「なんで分からない」などと言わない。
+・過剰に褒めない。
+・「一緒にやろう」くらいの自然な距離感。
+・説明を長くしすぎない。
+・間違いを責めない。
+・分からなければ別の言い方に変える。
+
+【学習方法】
+
+一度の回答ですべてを説明しない。
+
+最低3段階に分ける。
+
+STEP 1
+ヒント。
+
+答えを出さない。
+生徒が自分で考えられるようにする。
+
+STEP 2
+解説。
+
+STEP1より具体的に説明する。
+必要なら途中式を示す。
+ただし最終的な答えはまだ出さない。
+
+STEP 3
+答え。
+
+答えと考え方を整理する。
+
+現在指定されているSTEPだけを返す。
+
+【STEP3の後】
+
+練習問題を1問出す。
+
+【練習問題】
+
+生徒が答えたら理解度を確認する。
+
+正解なら、
+短く確認して次へ進む。
+
+不正解なら、
+
+1. 要点をもう一度説明
+2. 確認テスト
+3. 再挑戦
+
+の順番。
+
+確認テストでも分からなければ、
+さらに簡単な説明に変える。
+
+【添削】
+
+答案、ノート、作文などの画像を確認する。
+
+良いところ、
+間違っているところ、
+直すポイント
+
+を確認する。
+
+ただし最初から答えを全部出さない。
+
+【画像】
+
+画像がある場合は、画像を実際に確認する。
+
+数学の問題、
+答案、
+英作文、
+国語の記述などを読み取る。
+
+読めない部分は推測しない。
+`;
+
 
 /* =========================================================
    HTML
@@ -17,29 +233,49 @@ app.use(express.json({ limit: "15mb" }));
 
 const HTML = `<!DOCTYPE html>
 <html lang="ja">
+
 <head>
+
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+
+<meta
+  name="viewport"
+  content="width=device-width,initial-scale=1,viewport-fit=cover"
+>
+
 <title>AI学習チャット</title>
 
 <style>
+
 *{
   box-sizing:border-box;
   -webkit-tap-highlight-color:transparent;
 }
 
-html,body{
+html,
+body{
   margin:0;
   padding:0;
   width:100%;
   min-height:100%;
-  font-family:-apple-system,BlinkMacSystemFont,"Noto Sans JP","Yu Gothic",sans-serif;
+  font-family:
+    -apple-system,
+    BlinkMacSystemFont,
+    "Noto Sans JP",
+    "Yu Gothic",
+    sans-serif;
   background:#f7f7f8;
   color:#222;
 }
 
-button,textarea{font:inherit}
-button{cursor:pointer}
+button,
+textarea{
+  font:inherit;
+}
+
+button{
+  cursor:pointer;
+}
 
 .screen{
   display:none;
@@ -49,6 +285,7 @@ button{cursor:pointer}
 .screen.active{
   display:flex;
 }
+
 
 /* START */
 
@@ -88,6 +325,7 @@ button{cursor:pointer}
   transform:scale(.98);
   background:#f0f0f0;
 }
+
 
 /* SUBJECT */
 
@@ -138,6 +376,7 @@ button{cursor:pointer}
   font-size:25px;
 }
 
+
 /* CHAT */
 
 #chat{
@@ -180,6 +419,7 @@ button{cursor:pointer}
   color:#777;
   margin-top:2px;
 }
+
 
 /* PHOTO */
 
@@ -235,6 +475,7 @@ button{cursor:pointer}
   font-size:12px;
 }
 
+
 /* CHAT */
 
 .chat-body{
@@ -283,6 +524,7 @@ button{cursor:pointer}
   border-bottom-left-radius:5px;
 }
 
+
 /* THINKING */
 
 .typing{
@@ -302,19 +544,28 @@ button{cursor:pointer}
   animation:powa 1.1s infinite ease-in-out;
 }
 
-.dot:nth-child(2){animation-delay:.15s}
-.dot:nth-child(3){animation-delay:.30s}
+.dot:nth-child(2){
+  animation-delay:.15s;
+}
+
+.dot:nth-child(3){
+  animation-delay:.30s;
+}
 
 @keyframes powa{
+
   0%,70%,100%{
     transform:scale(.6);
     opacity:.35;
   }
+
   35%{
     transform:scale(1.5);
     opacity:1;
   }
+
 }
+
 
 /* INPUT */
 
@@ -324,7 +575,12 @@ button{cursor:pointer}
   right:0;
   bottom:0;
   z-index:20;
-  padding:9px 10px calc(9px + env(safe-area-inset-bottom));
+
+  padding:
+    9px
+    10px
+    calc(9px + env(safe-area-inset-bottom));
+
   background:rgba(255,255,255,.97);
   border-top:1px solid #ddd;
 }
@@ -332,6 +588,7 @@ button{cursor:pointer}
 .composer-inner{
   width:min(760px,100%);
   margin:auto;
+
   display:flex;
   gap:8px;
   align-items:flex-end;
@@ -342,21 +599,28 @@ button{cursor:pointer}
   min-height:47px;
   max-height:140px;
   resize:none;
+
   border:1px solid #ccc;
   border-radius:14px;
+
   padding:11px 13px;
+
   outline:none;
   background:#fff;
+
   line-height:1.5;
 }
 
 #send{
   width:64px;
   height:47px;
+
   border:0;
   border-radius:14px;
+
   background:#222;
   color:#fff;
+
   font-weight:600;
 }
 
@@ -364,16 +628,22 @@ button{cursor:pointer}
   opacity:.45;
 }
 
+
 /* CROP */
 
 #cropModal{
   display:none;
+
   position:fixed;
   inset:0;
+
   z-index:100;
+
   background:rgba(0,0,0,.75);
+
   align-items:center;
   justify-content:center;
+
   padding:14px;
 }
 
@@ -383,8 +653,10 @@ button{cursor:pointer}
 
 .crop-box{
   width:min(720px,100%);
+
   background:#fff;
   border-radius:18px;
+
   padding:15px;
 }
 
@@ -395,10 +667,14 @@ button{cursor:pointer}
 
 .crop-stage{
   position:relative;
+
   height:min(65dvh,540px);
+
   background:#111;
   border-radius:12px;
+
   overflow:hidden;
+
   display:flex;
   align-items:center;
   justify-content:center;
@@ -432,79 +708,106 @@ button{cursor:pointer}
   color:#fff;
 }
 
-.error-box{
-  color:#b00020;
-  background:#fff0f2;
-  border:1px solid #ffc4cc;
-  border-radius:12px;
-  padding:11px 13px;
-  white-space:pre-wrap;
-  font-size:13px;
-  line-height:1.6;
-}
 
 @media(max-width:600px){
-  .logo{font-size:27px}
-  .bubble{max-width:92%}
+
+  .logo{
+    font-size:27px;
+  }
+
+  .bubble{
+    max-width:92%;
+  }
+
 }
+
 </style>
+
 </head>
 
 <body>
 
+
 <section id="start" class="screen active">
+
   <div class="start-box">
 
-    <div class="logo">AI学習チャット</div>
+    <div class="logo">
+      AI学習チャット
+    </div>
 
     <div class="mode-list">
 
-      <button class="mode-button" data-mode="添削">
+      <button
+        class="mode-button"
+        data-mode="添削">
         添削
       </button>
 
-      <button class="mode-button" data-mode="質問">
+      <button
+        class="mode-button"
+        data-mode="質問">
         質問
       </button>
 
     </div>
+
   </div>
+
 </section>
 
 
 <section id="subjects" class="screen">
 
-  <button class="back" id="subjectBack">←</button>
+  <button
+    class="back"
+    id="subjectBack">
+    ←
+  </button>
 
   <div class="subject-box">
 
-    <h1 class="page-title" id="subjectTitle"></h1>
+    <h1
+      class="page-title"
+      id="subjectTitle">
+    </h1>
 
     <div class="subject-list">
 
-      <button class="subject-button" data-subject="国語">
+      <button
+        class="subject-button"
+        data-subject="国語">
         国語
       </button>
 
-      <button class="subject-button" data-subject="数学">
+      <button
+        class="subject-button"
+        data-subject="数学">
         数学
       </button>
 
-      <button class="subject-button" data-subject="社会">
+      <button
+        class="subject-button"
+        data-subject="社会">
         社会
       </button>
 
-      <button class="subject-button" data-subject="理科">
+      <button
+        class="subject-button"
+        data-subject="理科">
         理科
       </button>
 
-      <button class="subject-button" data-subject="英語">
+      <button
+        class="subject-button"
+        data-subject="英語">
         英語
       </button>
 
     </div>
 
   </div>
+
 </section>
 
 
@@ -512,7 +815,9 @@ button{cursor:pointer}
 
   <header class="chat-header">
 
-    <button class="chat-back" id="chatBack">
+    <button
+      class="chat-back"
+      id="chatBack">
       ←
     </button>
 
@@ -522,7 +827,10 @@ button{cursor:pointer}
         AI学習チャット
       </div>
 
-      <div class="chat-sub" id="chatSub"></div>
+      <div
+        class="chat-sub"
+        id="chatSub">
+      </div>
 
     </div>
 
@@ -533,23 +841,34 @@ button{cursor:pointer}
 
     <div class="attach-inner">
 
-      <div class="photo-preview" id="photoPreview">
+      <div
+        class="photo-preview"
+        id="photoPreview">
 
-        <img id="previewImage" alt="添付画像">
+        <img
+          id="previewImage"
+          alt="添付画像">
 
-        <button class="remove-photo" id="removePhoto">
+        <button
+          class="remove-photo"
+          id="removePhoto">
           写真を外す
         </button>
 
       </div>
 
+
       <div class="attach-buttons">
 
-        <button class="attach-button" id="takePhoto">
+        <button
+          class="attach-button"
+          id="takePhoto">
           写真を撮る
         </button>
 
-        <button class="attach-button" id="selectPhoto">
+        <button
+          class="attach-button"
+          id="selectPhoto">
           写真を選択
         </button>
 
@@ -575,9 +894,14 @@ button{cursor:pointer}
   </div>
 
 
-  <div class="chat-body" id="chatBody">
+  <div
+    class="chat-body"
+    id="chatBody">
 
-    <div class="messages" id="messages"></div>
+    <div
+      class="messages"
+      id="messages">
+    </div>
 
   </div>
 
@@ -589,8 +913,7 @@ button{cursor:pointer}
       <textarea
         id="input"
         rows="2"
-        placeholder="質問を入力…"
-      ></textarea>
+        placeholder="質問を入力…"></textarea>
 
       <button id="send">
         送信
@@ -613,17 +936,23 @@ button{cursor:pointer}
 
     <div class="crop-stage">
 
-      <canvas id="cropCanvas"></canvas>
+      <canvas
+        id="cropCanvas">
+      </canvas>
 
     </div>
 
     <div class="crop-buttons">
 
-      <button class="crop-cancel" id="cropCancel">
+      <button
+        class="crop-cancel"
+        id="cropCancel">
         キャンセル
       </button>
 
-      <button class="crop-use" id="cropUse">
+      <button
+        class="crop-use"
+        id="cropUse">
         この範囲を使う
       </button>
 
@@ -636,24 +965,21 @@ button{cursor:pointer}
 
 <script>
 
-/* =========================================================
-   STATE
-========================================================= */
-
 const state = {
-  mode: "",
-  subject: "",
-  step: 1,
-  messages: [],
-  imageData: null,
-  answerIds: [],
-  waiting: false
+
+  mode:"",
+  subject:"",
+  step:1,
+
+  messages:[],
+  imageData:null,
+
+  answerIds:[],
+
+  waiting:false
+
 };
 
-
-/* =========================================================
-   ELEMENTS
-========================================================= */
 
 const start =
   document.getElementById("start");
@@ -701,53 +1027,43 @@ const cropCanvas =
   document.getElementById("cropCanvas");
 
 
-/* =========================================================
-   SCREEN
-========================================================= */
-
 function showScreen(screen){
 
   document
     .querySelectorAll(".screen")
-    .forEach(element=>{
-      element.classList.remove("active");
+    .forEach(x=>{
+      x.classList.remove("active");
     });
 
   screen.classList.add("active");
+
 }
 
 
-/* =========================================================
-   MODE
-========================================================= */
+/* MODE */
 
 document
   .querySelectorAll("[data-mode]")
   .forEach(button=>{
 
-    button.addEventListener("click",()=>{
+    button.onclick=()=>{
 
       state.mode =
-        String(button.dataset.mode || "").trim();
-
-      console.log(
-        "選択モード:",
-        state.mode
-      );
+        String(
+          button.dataset.mode || ""
+        ).trim();
 
       subjectTitle.textContent =
         state.mode;
 
       showScreen(subjects);
 
-    });
+    };
 
   });
 
 
-/* =========================================================
-   BACK
-========================================================= */
+/* BACK */
 
 document
   .getElementById("subjectBack")
@@ -771,15 +1087,13 @@ document
   };
 
 
-/* =========================================================
-   SUBJECT
-========================================================= */
+/* SUBJECT */
 
 document
   .querySelectorAll("[data-subject]")
   .forEach(button=>{
 
-    button.addEventListener("click",()=>{
+    button.onclick=()=>{
 
       state.subject =
         String(
@@ -787,12 +1101,17 @@ document
         ).trim();
 
       state.step = 1;
+
       state.messages = [];
+
       state.imageData = null;
+
       state.answerIds = [];
+
       state.waiting = false;
 
       messages.innerHTML = "";
+
       input.value = "";
 
       clearPhoto();
@@ -810,14 +1129,12 @@ document
 
       input.focus();
 
-    });
+    };
 
   });
 
 
-/* =========================================================
-   MESSAGE
-========================================================= */
+/* MESSAGE */
 
 function addMessage(text,type){
 
@@ -843,22 +1160,31 @@ function addMessage(text,type){
   scrollBottom();
 
   return row;
+
 }
 
 
 function addAI(text){
-  return addMessage(text,"ai");
+
+  return addMessage(
+    text,
+    "ai"
+  );
+
 }
 
 
 function addUser(text){
-  return addMessage(text,"user");
+
+  return addMessage(
+    text,
+    "user"
+  );
+
 }
 
 
-/* =========================================================
-   THINKING
-========================================================= */
+/* THINKING */
 
 function showThinking(){
 
@@ -893,6 +1219,7 @@ function showThinking(){
   scrollBottom();
 
   return row;
+
 }
 
 
@@ -908,9 +1235,7 @@ function scrollBottom(){
 }
 
 
-/* =========================================================
-   PHOTO
-========================================================= */
+/* PHOTO */
 
 document
   .getElementById("takePhoto")
@@ -927,21 +1252,26 @@ document
 
 
 cameraInput.onchange =
-  event=>{
-    handleImage(event.target.files[0]);
+  e=>{
+    handleImage(e.target.files[0]);
   };
 
 
 fileInput.onchange =
-  event=>{
-    handleImage(event.target.files[0]);
+  e=>{
+    handleImage(e.target.files[0]);
   };
 
 
-let cropImage = new Image();
+let cropImage =
+  new Image();
+
 let cropSource = null;
+
 let cropRect = null;
+
 let dragging = false;
+
 let dragStart = null;
 
 
@@ -951,11 +1281,16 @@ function handleImage(file){
     return;
   }
 
-  if(!file.type.startsWith("image/")){
+  if(
+    !file.type.startsWith("image/")
+  ){
 
-    alert("画像を選択してください。");
+    alert(
+      "画像を選択してください。"
+    );
 
     return;
+
   }
 
   const reader =
@@ -979,18 +1314,18 @@ function handleImage(file){
   };
 
   reader.readAsDataURL(file);
+
 }
 
 
-/* =========================================================
-   CROP
-========================================================= */
+/* CROP */
 
 function openCrop(){
 
   cropModal.classList.add("show");
 
   setupCropCanvas();
+
 }
 
 
@@ -1013,11 +1348,13 @@ function setupCropCanvas(){
     cropImage.naturalHeight;
 
   let w = maxW;
+
   let h = w / ratio;
 
   if(h > maxH){
 
     h = maxH;
+
     w = h * ratio;
 
   }
@@ -1030,14 +1367,16 @@ function setupCropCanvas(){
 
   cropRect = {
 
-    x:w * .08,
-    y:h * .08,
-    width:w * .84,
-    height:h * .84
+    x:w*.08,
+    y:h*.08,
+
+    width:w*.84,
+    height:h*.84
 
   };
 
   drawCrop();
+
 }
 
 
@@ -1086,7 +1425,9 @@ function drawCrop(){
     cropRect.height
   );
 
-  ctx.fill("evenodd");
+  ctx.fill(
+    "evenodd"
+  );
 
   ctx.strokeStyle =
     "#fff";
@@ -1099,12 +1440,11 @@ function drawCrop(){
     cropRect.width,
     cropRect.height
   );
+
 }
 
 
-/* =========================================================
-   CROP MOVE
-========================================================= */
+/* CROP MOVE */
 
 function pointerPosition(event){
 
@@ -1122,14 +1462,17 @@ function pointerPosition(event){
   return {
 
     x:
-      (event.clientX - rect.left) *
+      (event.clientX -
+       rect.left) *
       scaleX,
 
     y:
-      (event.clientY - rect.top) *
+      (event.clientY -
+       rect.top) *
       scaleY
 
   };
+
 }
 
 
@@ -1151,8 +1494,13 @@ cropCanvas.addEventListener(
 
       dragStart = {
 
-        x:p.x - cropRect.x,
-        y:p.y - cropRect.y
+        x:
+          p.x -
+          cropRect.x,
+
+        y:
+          p.y -
+          cropRect.y
 
       };
 
@@ -1178,10 +1526,12 @@ cropCanvas.addEventListener(
       pointerPosition(event);
 
     let x =
-      p.x - dragStart.x;
+      p.x -
+      dragStart.x;
 
     let y =
-      p.y - dragStart.y;
+      p.y -
+      dragStart.y;
 
     x =
       Math.max(
@@ -1204,6 +1554,7 @@ cropCanvas.addEventListener(
       );
 
     cropRect.x = x;
+
     cropRect.y = y;
 
     drawCrop();
@@ -1220,9 +1571,7 @@ cropCanvas.addEventListener(
 );
 
 
-/* =========================================================
-   CROP USE
-========================================================= */
+/* CROP USE */
 
 document
   .getElementById("cropUse")
@@ -1243,7 +1592,8 @@ document
       Math.min(
         1600,
         Math.round(
-          cropRect.width * scaleX
+          cropRect.width *
+          scaleX
         )
       );
 
@@ -1251,7 +1601,8 @@ document
       Math.min(
         1600,
         Math.round(
-          cropRect.height * scaleY
+          cropRect.height *
+          scaleY
         )
       );
 
@@ -1285,14 +1636,18 @@ document
     previewImage.src =
       state.imageData;
 
-    photoPreview.classList.add("show");
+    photoPreview.classList.add(
+      "show"
+    );
 
-    cropModal.classList.remove("show");
+    cropModal.classList.remove(
+      "show"
+    );
 
     cropSource = null;
 
     /*
-     * 質問入力欄は変更しない。
+     * 入力内容はそのまま保持。
      */
 
     input.focus();
@@ -1304,16 +1659,16 @@ document
   .getElementById("cropCancel")
   .onclick=()=>{
 
-    cropModal.classList.remove("show");
+    cropModal.classList.remove(
+      "show"
+    );
 
     cropSource = null;
 
   };
 
 
-/* =========================================================
-   REMOVE PHOTO
-========================================================= */
+/* REMOVE PHOTO */
 
 document
   .getElementById("removePhoto")
@@ -1325,19 +1680,22 @@ function clearPhoto(){
 
   state.imageData = null;
 
-  previewImage.removeAttribute("src");
+  previewImage.removeAttribute(
+    "src"
+  );
 
-  photoPreview.classList.remove("show");
+  photoPreview.classList.remove(
+    "show"
+  );
 
   cameraInput.value = "";
+
   fileInput.value = "";
 
 }
 
 
-/* =========================================================
-   SEND
-========================================================= */
+/* SEND */
 
 send.onclick =
   sendMessage;
@@ -1375,30 +1733,22 @@ async function sendMessage(){
     !text &&
     !state.imageData
   ){
-    return;
-  }
 
+    return;
+
+  }
 
   let display =
     text;
 
-
   if(state.imageData){
 
-    if(display){
-
-      display +=
-        "\\n\\n[写真を添付]";
-
-    }else{
-
-      display =
-        "[写真を添付]";
-
-    }
+    display +=
+      display
+        ? "\\n\\n[写真を添付]"
+        : "[写真を添付]";
 
   }
-
 
   addUser(display);
 
@@ -1425,22 +1775,39 @@ async function sendMessage(){
     showThinking();
 
 
-  /*
-   * 送信直前の値をログに出す。
-   */
-
-  console.log(
-    "送信内容:",
-    {
-      mode:state.mode,
-      subject:state.subject,
-      step:state.step,
-      hasImage:Boolean(state.imageData)
-    }
-  );
-
-
   try{
+
+    const payload = {
+
+      mode:
+        String(
+          state.mode || ""
+        ).trim(),
+
+      subject:
+        String(
+          state.subject || ""
+        ).trim(),
+
+      step:
+        state.step,
+
+      messages:
+        state.messages,
+
+      imageData:
+        state.imageData
+
+    };
+
+
+    console.log(
+      "送信:",
+      payload.mode,
+      payload.subject,
+      payload.step
+    );
+
 
     const response =
       await fetch(
@@ -1455,28 +1822,9 @@ async function sendMessage(){
           },
 
           body:
-            JSON.stringify({
-
-              mode:
-                String(
-                  state.mode || ""
-                ).trim(),
-
-              subject:
-                String(
-                  state.subject || ""
-                ).trim(),
-
-              step:
-                state.step,
-
-              messages:
-                state.messages,
-
-              imageData:
-                state.imageData
-
-            })
+            JSON.stringify(
+              payload
+            )
 
         }
       );
@@ -1532,9 +1880,8 @@ async function sendMessage(){
     clearPhoto();
 
 
-  }catch(error){
-
-    console.error(error);
+  }
+  catch(error){
 
     thinking.remove();
 
@@ -1543,40 +1890,18 @@ async function sendMessage(){
     );
 
 
-    const errorRow =
-      document.createElement("div");
-
-    errorRow.className =
-      "message ai";
-
-
-    const errorBox =
-      document.createElement("div");
-
-    errorBox.className =
-      "error-box";
-
-
-    errorBox.textContent =
+    addAI(
       "エラー詳細：\\n" +
       (
         error.message ||
         "不明なエラー"
-      );
-
-
-    errorRow.appendChild(
-      errorBox
+      )
     );
 
-    messages.appendChild(
-      errorRow
-    );
+    console.error(error);
 
-    scrollBottom();
-
-
-  }finally{
+  }
+  finally{
 
     state.waiting = false;
 
@@ -1589,18 +1914,22 @@ async function sendMessage(){
 }
 
 
-/* =========================================================
-   RESET
-========================================================= */
+/* RESET */
 
 function resetSession(){
 
   state.mode = "";
+
   state.subject = "";
+
   state.step = 1;
+
   state.messages = [];
+
   state.imageData = null;
+
   state.answerIds = [];
+
   state.waiting = false;
 
   messages.innerHTML = "";
@@ -1624,580 +1953,554 @@ window.addEventListener(
 
 
 /* =========================================================
-   SYSTEM PROMPT
+   API CHAT
 ========================================================= */
 
-const SYSTEM_PROMPT = `
-あなたは中学生向けのAI学習チャットの先生です。
+app.post("/api/chat", async (req, res) => {
 
-【話し方】
-・中学生に自然に伝わる言葉を使う。
-・優しいが、子ども扱いしない。
-・上から目線にしない。
-・「こんなの簡単」「なんで分からない」などと言わない。
-・過剰に褒めない。
-・短く分かりやすく説明する。
-・間違いを責めない。
-・分からなければ別の説明方法に変える。
+  try {
 
-【最低3段階】
-一つの回答でヒント・解説・答えを全部出してはいけません。
+    if (!GROQ_API_KEY) {
 
-STEP 1：
-ヒントだけ。
-答えを出さない。
+      return res.status(500).json({
+        error:
+          "GROQ_API_KEYがRenderに設定されていません。"
+      });
 
-STEP 2：
-解説。
-途中式や考え方を示してよい。
-最終的な答えはまだ出さない。
-
-STEP 3：
-答え。
-正しい答えと考え方を整理する。
-
-現在指定されているSTEPだけを返してください。
-
-【STEP3の後】
-同じ内容の練習問題を1問出してください。
-
-【練習問題】
-正解なら短く確認してください。
-不正解なら、
-
-1. 要点をもう一度説明
-2. 確認テスト
-3. 再挑戦
-
-の順で進めてください。
-
-確認テストでも分からなければ、さらに簡単に説明してください。
-
-【添削】
-答案、ノート、作文などの画像を確認してください。
-良いところ、間違い、直すポイントを確認してください。
-最初から全部答えを出さず、段階的に進めてください。
-
-【画像】
-画像の内容を確認してください。
-数学の問題、答案、英作文、国語の記述などを読み取ってください。
-読めない部分は推測しないでください。
-`;
+    }
 
 
-/* =========================================================
-   GROQ API
-========================================================= */
+    const mode =
+      String(
+        req.body?.mode || ""
+      ).trim();
 
-app.post(
-  "/api/chat",
-  async (req,res)=>{
+    const subject =
+      String(
+        req.body?.subject || ""
+      ).trim();
 
-    try{
-
-      /*
-       * 受信内容をRenderログで確認
-       */
-
-      console.log(
-        "========== API REQUEST =========="
+    const step =
+      Number(
+        req.body?.step || 1
       );
 
-      console.log(
-        "mode:",
-        req.body?.mode
-      );
+    const messages =
+      Array.isArray(req.body?.messages)
+        ? req.body.messages
+        : [];
 
-      console.log(
-        "subject:",
-        req.body?.subject
-      );
-
-      console.log(
-        "step:",
-        req.body?.step
-      );
-
-      console.log(
-        "hasImage:",
-        Boolean(req.body?.imageData)
-      );
-
-      console.log(
-        "================================="
-      );
+    const imageData =
+      req.body?.imageData;
 
 
-      if(!GROQ_API_KEY){
-
-        return res.status(500).json({
-
-          error:
-            "GROQ_API_KEY が設定されていません。RenderのEnvironment Variablesを確認してください。"
-
-        });
-
+    console.log(
+      "API:",
+      {
+        mode,
+        subject,
+        step,
+        image: Boolean(imageData)
       }
+    );
 
 
-      /*
-       * modeを明示的に文字列化
-       */
+    if (
+      mode !== "質問" &&
+      mode !== "添削"
+    ) {
 
-      const rawMode =
-        req.body?.mode;
+      return res.status(400).json({
+        error:
+          "モードが正しくありません。\n" +
+          "受信: [" + mode + "]"
+      });
 
-      const rawSubject =
-        req.body?.subject;
-
-
-      const mode =
-        String(
-          rawMode ?? ""
-        ).trim();
+    }
 
 
-      const subject =
-        String(
-          rawSubject ?? ""
-        ).trim();
+    const allowedSubjects = [
+      "国語",
+      "数学",
+      "社会",
+      "理科",
+      "英語"
+    ];
 
 
-      const step =
-        Number(
-          req.body?.step || 1
+    if (
+      !allowedSubjects.includes(subject)
+    ) {
+
+      return res.status(400).json({
+        error:
+          "教科が正しくありません。\n" +
+          "受信: [" + subject + "]"
+      });
+
+    }
+
+
+    const history =
+      messages
+        .slice(-14)
+        .filter(
+          x =>
+            x &&
+            x.content &&
+            (
+              x.role === "user" ||
+              x.role === "assistant"
+            )
         );
 
 
-      const messages =
-        req.body?.messages;
+    let currentStep =
+      "STEP 1：ヒント";
 
 
-      const imageData =
-        req.body?.imageData;
+    if (step === 2) {
+
+      currentStep =
+        "STEP 2：解説";
+
+    }
+    else if (step >= 3) {
+
+      currentStep =
+        "STEP 3：答え。その後は練習問題";
+
+    }
 
 
-      console.log(
-        "正規化後:",
-        {
-          mode,
-          subject,
-          step
-        }
-      );
+    const groqMessages = [
 
+      {
+        role: "system",
 
-      /*
-       * mode確認
-       */
+        content:
+          SYSTEM_PROMPT +
 
-      if(
-        mode !== "質問" &&
-        mode !== "添削"
-      ){
+          "\n\n現在の教科：" +
+          subject +
 
-        return res.status(400).json({
+          "\n現在のモード：" +
+          mode +
 
-          error:
-            "モードが正しくありません。\n" +
-            "受信したmode: [" +
-            mode +
-            "]"
-
-        });
+          "\n現在の段階：" +
+          currentStep
 
       }
 
-
-      /*
-       * subject確認
-       */
-
-      const allowedSubjects = [
-        "国語",
-        "数学",
-        "社会",
-        "理科",
-        "英語"
-      ];
+    ];
 
 
-      if(
-        !allowedSubjects.includes(
-          subject
-        )
-      ){
+    for (
+      const message of history
+    ) {
 
-        return res.status(400).json({
+      groqMessages.push({
 
-          error:
-            "教科が正しくありません。\n" +
-            "受信したsubject: [" +
-            subject +
-            "]"
+        role:
+          message.role === "assistant"
+            ? "assistant"
+            : "user",
 
-        });
+        content:
+          String(
+            message.content
+          ).slice(
+            0,
+            12000
+          )
 
-      }
+      });
 
-
-      if(!GROQ_API_KEY){
-
-        return res.status(500).json({
-
-          error:
-            "GROQ_API_KEYがありません。"
-
-        });
-
-      }
+    }
 
 
-      /*
-       * 会話履歴
-       *
-       * サーバーには保存しない。
-       */
+    /*
+     * 画像があれば最後のuserに追加
+     */
 
-      const history =
-        Array.isArray(messages)
-          ? messages.slice(-14)
-          : [];
+    if (
+      typeof imageData === "string" &&
+      imageData.startsWith("data:image/")
+    ) {
 
+      for (
+        let i =
+          groqMessages.length - 1;
+        i >= 0;
+        i--
+      ) {
 
-      let currentStep =
-        "STEP 1：ヒント";
+        if (
+          groqMessages[i].role === "user"
+        ) {
 
+          const text =
+            groqMessages[i].content;
 
-      if(step === 2){
+          groqMessages[i].content = [
 
-        currentStep =
-          "STEP 2：解説";
+            {
+              type: "text",
+              text:
+                text ||
+                "この画像を確認してください。"
+            },
 
-      }
-      else if(step >= 3){
+            {
+              type: "image_url",
 
-        currentStep =
-          "STEP 3：答え。その後は練習問題";
+              image_url: {
+                url: imageData
+              }
 
-      }
+            }
 
+          ];
 
-      const groqMessages = [
-
-        {
-
-          role:"system",
-
-          content:
-            SYSTEM_PROMPT +
-
-            "\n\n現在の教科：" +
-            subject +
-
-            "\n現在のモード：" +
-            mode +
-
-            "\n現在の段階：" +
-            currentStep
+          break;
 
         }
 
-      ];
+      }
+
+    }
 
 
-      /*
-       * 会話をGroqへ渡す
-       */
+    /*
+     * 現在利用できるモデルを取得
+     */
 
-      for(
-        const message
-        of history
-      ){
+    const candidates =
+      await getModelCandidates();
 
-        if(
-          !message ||
-          !message.content
-        ){
+
+    if (!candidates.length) {
+
+      const models =
+        await getGroqModels();
+
+      const ids =
+        models
+          .map(x => x.id)
+          .filter(Boolean);
+
+      return res.status(500).json({
+
+        error:
+          "現在のGroqモデル一覧から画像対応候補を自動判定できませんでした。\n\n" +
+          "利用可能モデル:\n" +
+          ids.join("\n")
+
+      });
+
+    }
+
+
+    console.log(
+      "モデル候補:",
+      candidates
+    );
+
+
+    let lastError =
+      null;
+
+
+    /*
+     * 候補を順番に試す。
+     */
+
+    for (
+      const model of candidates
+    ) {
+
+      try {
+
+        console.log(
+          "Groq試行:",
+          model
+        );
+
+
+        const response =
+          await fetch(
+            "https://api.groq.com/openai/v1/chat/completions",
+            {
+
+              method: "POST",
+
+              headers: {
+
+                Authorization:
+                  `Bearer ${GROQ_API_KEY}`,
+
+                "Content-Type":
+                  "application/json"
+
+              },
+
+              body:
+                JSON.stringify({
+
+                  model,
+
+                  messages:
+                    groqMessages,
+
+                  temperature:
+                    0.45,
+
+                  max_tokens:
+                    1000
+
+                })
+
+            }
+          );
+
+
+        const raw =
+          await response.text();
+
+
+        let data;
+
+        try {
+
+          data =
+            JSON.parse(raw);
+
+        }
+        catch {
+
+          data = {
+            raw
+          };
+
+        }
+
+
+        if (!response.ok) {
+
+          const message =
+            data?.error?.message ||
+            data?.message ||
+            data?.raw ||
+            "Groq APIエラー";
+
+
+          console.error(
+            "モデル失敗:",
+            model,
+            response.status,
+            message
+          );
+
+
+          lastError = {
+            model,
+            status: response.status,
+            message
+          };
+
+
+          /*
+           * 404やモデル関連エラーなら
+           * 次の候補へ。
+           */
+
+          if (
+            response.status === 404 ||
+            /model|vision|image|unsupported|not found|access/i.test(
+              message
+            )
+          ) {
+
+            continue;
+
+          }
+
+
+          return res.status(
+            response.status
+          ).json({
+
+            error:
+              "Groq APIエラー\n" +
+              "モデル: " +
+              model +
+              "\nHTTP: " +
+              response.status +
+              "\n\n" +
+              message
+
+          });
+
+        }
+
+
+        const answer =
+          data?.choices?.[0]?.message?.content;
+
+
+        if (!answer) {
+
+          lastError = {
+            model,
+            status: 500,
+            message:
+              "回答が返ってきませんでした。"
+          };
 
           continue;
 
         }
 
 
-        groqMessages.push({
+        console.log(
+          "採用モデル:",
+          model
+        );
 
-          role:
-            message.role === "assistant"
-              ? "assistant"
-              : "user",
 
-          content:
-            String(
-              message.content
-            ).slice(
-              0,
-              12000
-            )
+        return res.json({
+
+          id:
+            data.id ||
+            crypto.randomUUID(),
+
+          model,
+
+          answer
 
         });
 
       }
+      catch (error) {
 
-
-      /*
-       * 画像
-       */
-
-      if(
-        imageData &&
-        typeof imageData === "string" &&
-        imageData.startsWith(
-          "data:image/"
-        )
-      ){
-
-        for(
-          let i =
-            groqMessages.length - 1;
-          i >= 0;
-          i--
-        ){
-
-          if(
-            groqMessages[i].role ===
-              "user"
-          ){
-
-            const text =
-              groqMessages[i].content;
-
-
-            groqMessages[i].content = [
-
-              {
-
-                type:"text",
-
-                text:
-                  text ||
-                  "この画像を確認してください。"
-
-              },
-
-              {
-
-                type:"image_url",
-
-                image_url:{
-                  url:imageData
-                }
-
-              }
-
-            ];
-
-
-            break;
-
-          }
-
-        }
-
-      }
-
-
-      console.log(
-        "Groqへ送信:",
-        {
-          model:GROQ_MODEL,
-          mode,
-          subject,
-          step,
-          hasImage:Boolean(imageData)
-        }
-      );
-
-
-      /*
-       * Groq
-       */
-
-      const groqResponse =
-        await fetch(
-          "https://api.groq.com/openai/v1/chat/completions",
-          {
-
-            method:"POST",
-
-            headers:{
-
-              "Authorization":
-                "Bearer " +
-                GROQ_API_KEY,
-
-              "Content-Type":
-                "application/json"
-
-            },
-
-            body:
-              JSON.stringify({
-
-                model:
-                  GROQ_MODEL,
-
-                messages:
-                  groqMessages,
-
-                temperature:
-                  0.45,
-
-                max_tokens:
-                  1000
-
-              })
-
-          }
-        );
-
-
-      const rawText =
-        await groqResponse.text();
-
-
-      let data;
-
-
-      try{
-
-        data =
-          JSON.parse(
-            rawText
-          );
-
-      }
-      catch{
-
-        data = {
-          raw:rawText
+        lastError = {
+          model,
+          status: 500,
+          message:
+            error.message
         };
 
-      }
-
-
-      /*
-       * Groqエラー
-       */
-
-      if(
-        !groqResponse.ok
-      ){
-
         console.error(
-          "========== GROQ ERROR =========="
+          "モデル通信エラー:",
+          model,
+          error
         );
-
-        console.error(
-          "HTTP:",
-          groqResponse.status
-        );
-
-        console.error(
-          "MODEL:",
-          GROQ_MODEL
-        );
-
-        console.error(
-          "RESPONSE:",
-          data
-        );
-
-        console.error(
-          "================================"
-        );
-
-
-        return res.status(
-          groqResponse.status
-        ).json({
-
-          error:
-            "Groq APIエラー\n" +
-            "HTTP " +
-            groqResponse.status +
-            "\n\n" +
-            (
-              data?.error?.message ||
-              data?.message ||
-              data?.raw ||
-              "Groqから詳細なエラーが返りませんでした。"
-            )
-
-        });
 
       }
 
-
-      const answer =
-        data?.choices?.[0]?.message?.content;
+    }
 
 
-      if(!answer){
+    /*
+     * 全候補失敗
+     */
 
-        console.error(
-          "回答なし:",
-          data
-        );
-
-
-        return res.status(500).json({
-
-          error:
-            "Groqから回答が返ってきませんでした。"
-
-        });
-
-      }
+    const available =
+      await getGroqModels();
 
 
-      const answerId =
-        data.id ||
-        crypto.randomUUID();
+    res.status(500).json({
+
+      error:
+        "利用可能なVision候補を試しましたが、すべて失敗しました。\n\n" +
+
+        "最後のエラー:\n" +
+        JSON.stringify(
+          lastError,
+          null,
+          2
+        ) +
+
+        "\n\n現在のモデル一覧:\n" +
+
+        available
+          .map(x => x.id)
+          .filter(Boolean)
+          .join("\n")
+
+    });
+
+  }
+  catch (error) {
+
+    console.error(
+      "CHAT ERROR:",
+      error
+    );
+
+    res.status(500).json({
+
+      error:
+        error.message ||
+        "サーバーエラー"
+
+    });
+
+  }
+
+});
+
+
+/* =========================================================
+   MODEL LIST API
+========================================================= */
+
+app.get(
+  "/api/models",
+  async (req, res) => {
+
+    try {
+
+      const models =
+        await getGroqModels();
 
 
       res.json({
 
-        id:
-          answerId,
+        models:
+          models.map(model => ({
 
-        answer:
-          answer
+            id:
+              model.id,
+
+            owned_by:
+              model.owned_by,
+
+            active:
+              model.active,
+
+            context_window:
+              model.context_window,
+
+            max_completion_tokens:
+              model.max_completion_tokens
+
+          })),
+
+        visionCandidates:
+          getVisionCandidates(
+            models
+          )
 
       });
 
-
     }
-    catch(error){
-
-      console.error(
-        "========== SERVER ERROR =========="
-      );
-
-      console.error(
-        error
-      );
-
-      console.error(
-        "=================================="
-      );
-
+    catch (error) {
 
       res.status(500).json({
 
         error:
-          error.message ||
-          "サーバー側でエラーが発生しました。"
+          error.message
 
       });
 
@@ -2211,19 +2514,12 @@ app.post(
    HTML
 ========================================================= */
 
-/*
- * Express 5対応。
- * app.get("*") は使わない。
- */
-
 app.use(
-  (req,res)=>{
+  (req, res) => {
 
     res.type("html");
 
-    res.send(
-      HTML
-    );
+    res.send(HTML);
 
   }
 );
@@ -2235,7 +2531,7 @@ app.use(
 
 app.listen(
   PORT,
-  ()=>{
+  () => {
 
     console.log(
       "================================"
@@ -2251,15 +2547,15 @@ app.listen(
     );
 
     console.log(
-      "MODEL:",
-      GROQ_MODEL
-    );
-
-    console.log(
-      "API KEY:",
+      "GROQ API:",
       GROQ_API_KEY
         ? "設定済み"
         : "未設定"
+    );
+
+    console.log(
+      "手動モデル:",
+      MANUAL_MODEL || "なし"
     );
 
     console.log(
