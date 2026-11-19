@@ -6,21 +6,156 @@ if (!config) {
 
 
 /* =========================================================
-   セッション状態
+   MathJax設定
 ========================================================= */
 
-let learningState = "hint";
-let messages = [];
-let answerIds = [];
-let imageData = null;
-let waiting = false;
+window.MathJax = {
+
+  tex: {
+
+    inlineMath: [
+      ["\\(", "\\)"],
+      ["$", "$"]
+    ],
+
+    displayMath: [
+      ["\\[", "\\]"],
+      ["$$", "$$"]
+    ]
+
+  },
+
+  options: {
+
+    skipHtmlTags: [
+      "script",
+      "noscript",
+      "style",
+      "textarea",
+      "pre",
+      "code"
+    ]
+
+  },
+
+  startup: {
+
+    typeset: false
+
+  }
+
+};
+
+
+let mathJaxReady = false;
+let mathJaxLoading = null;
 
 
 /* =========================================================
-   画面
+   MathJax読み込み
 ========================================================= */
 
-document.getElementById("app").innerHTML = `
+function loadMathJax(){
+
+  if(
+    window.MathJax &&
+    typeof window.MathJax.typesetPromise ===
+      "function"
+  ){
+
+    mathJaxReady = true;
+
+    return Promise.resolve();
+
+  }
+
+
+  if(mathJaxLoading){
+
+    return mathJaxLoading;
+
+  }
+
+
+  mathJaxLoading =
+    new Promise(
+      (resolve,reject)=>{
+
+        const script =
+          document.createElement(
+            "script"
+          );
+
+        script.src =
+          "https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js";
+
+        script.async = true;
+
+
+        script.onload = ()=>{
+
+          mathJaxReady = true;
+
+          resolve();
+
+        };
+
+
+        script.onerror = ()=>{
+
+          console.error(
+            "MathJaxの読み込みに失敗しました。"
+          );
+
+          reject(
+            new Error(
+              "MathJaxの読み込みに失敗しました。"
+            )
+          );
+
+        };
+
+
+        document.head.appendChild(
+          script
+        );
+
+      }
+    );
+
+
+  return mathJaxLoading;
+
+}
+
+
+/* =========================================================
+   セッション状態
+========================================================= */
+
+let learningState =
+  "hint";
+
+let messages =
+  [];
+
+let answerIds =
+  [];
+
+let imageData =
+  null;
+
+let waiting =
+  false;
+
+
+/* =========================================================
+   CHAT UI
+========================================================= */
+
+document
+  .getElementById("app")
+  .innerHTML = `
 
 <style>
 
@@ -33,8 +168,10 @@ html,
 body{
   margin:0;
   padding:0;
+
   width:100%;
   height:100%;
+
   overflow:hidden;
 
   font-family:
@@ -63,6 +200,7 @@ button{
 ========================================================= */
 
 .chat{
+
   width:100%;
   height:100dvh;
 
@@ -70,6 +208,7 @@ button{
   flex-direction:column;
 
   background:#f7f7f8;
+
 }
 
 
@@ -78,6 +217,7 @@ button{
 ========================================================= */
 
 .header{
+
   height:64px;
   min-height:64px;
 
@@ -93,9 +233,11 @@ button{
   border-bottom:1px solid #e5e5e5;
 
   z-index:10;
+
 }
 
 .back{
+
   width:42px;
   height:42px;
 
@@ -106,19 +248,27 @@ button{
   background:transparent;
 
   font-size:24px;
+
 }
 
 .header-info{
+
   min-width:0;
+
   margin-left:5px;
+
 }
 
 .title{
+
   font-size:16px;
+
   font-weight:700;
+
 }
 
 .subtitle{
+
   margin-top:2px;
 
   font-size:12px;
@@ -126,8 +276,11 @@ button{
   color:#777;
 
   white-space:nowrap;
+
   overflow:hidden;
+
   text-overflow:ellipsis;
+
 }
 
 
@@ -136,6 +289,7 @@ button{
 ========================================================= */
 
 .attach-area{
+
   flex:none;
 
   padding:11px;
@@ -143,21 +297,27 @@ button{
   background:#fff;
 
   border-bottom:1px solid #e5e5e5;
+
 }
 
 .attach-inner{
+
   width:min(760px,100%);
 
   margin:auto;
+
 }
 
 .attach-buttons{
+
   display:flex;
 
   gap:8px;
+
 }
 
 .attach-button{
+
   flex:1;
 
   height:43px;
@@ -169,34 +329,45 @@ button{
   background:#fff;
 
   font-size:14px;
+
 }
 
 .attach-button:active{
+
   background:#f1f1f1;
+
 }
 
 .preview{
+
   display:none;
 
   margin-bottom:9px;
+
 }
 
 .preview.show{
+
   display:block;
+
 }
 
 .preview img{
+
   display:block;
 
   max-width:100%;
+
   max-height:180px;
 
   border-radius:12px;
 
   border:1px solid #ddd;
+
 }
 
 .remove{
+
   margin-top:6px;
 
   border:0;
@@ -208,14 +379,16 @@ button{
   background:#eee;
 
   font-size:12px;
+
 }
 
 
 /* =========================================================
-   SCROLL AREA
+   CHAT SCROLL
 ========================================================= */
 
 .body{
+
   flex:1;
 
   min-height:0;
@@ -236,9 +409,11 @@ button{
   overscroll-behavior-y:contain;
 
   scroll-behavior:smooth;
+
 }
 
 .messages{
+
   width:min(760px,100%);
 
   margin:0 auto;
@@ -246,6 +421,7 @@ button{
   display:flex;
 
   flex-direction:column;
+
 }
 
 
@@ -254,22 +430,29 @@ button{
 ========================================================= */
 
 .message{
+
   display:flex;
 
   flex:none;
 
   margin:9px 0;
+
 }
 
 .message.user{
+
   justify-content:flex-end;
+
 }
 
 .message.ai{
+
   justify-content:flex-start;
+
 }
 
 .bubble{
+
   max-width:88%;
 
   padding:12px 15px;
@@ -283,17 +466,23 @@ button{
   word-break:break-word;
 
   font-size:15px;
+
+  overflow-wrap:anywhere;
+
 }
 
 .user .bubble{
+
   background:#222;
 
   color:#fff;
 
   border-bottom-right-radius:5px;
+
 }
 
 .ai .bubble{
+
   background:#fff;
 
   color:#222;
@@ -301,6 +490,36 @@ button{
   border:1px solid #e4e4e4;
 
   border-bottom-left-radius:5px;
+
+}
+
+
+/* =========================================================
+   数式
+========================================================= */
+
+.ai .bubble mjx-container{
+
+  max-width:100%;
+
+}
+
+.ai .bubble mjx-container[display="true"]{
+
+  overflow-x:auto;
+
+  overflow-y:hidden;
+
+  max-width:100%;
+
+  padding:4px 0;
+
+}
+
+.ai .bubble mjx-container{
+
+  font-size:105%;
+
 }
 
 
@@ -309,6 +528,7 @@ button{
 ========================================================= */
 
 .typing{
+
   height:42px;
 
   min-width:58px;
@@ -316,13 +536,17 @@ button{
   display:flex;
 
   align-items:center;
+
   justify-content:center;
 
   gap:6px;
+
 }
 
 .dot{
+
   width:8px;
+
   height:8px;
 
   border-radius:50%;
@@ -330,14 +554,19 @@ button{
   background:#777;
 
   animation:powa 1.1s infinite ease-in-out;
+
 }
 
 .dot:nth-child(2){
+
   animation-delay:.15s;
+
 }
 
 .dot:nth-child(3){
+
   animation-delay:.30s;
+
 }
 
 @keyframes powa{
@@ -345,13 +574,19 @@ button{
   0%,
   70%,
   100%{
+
     transform:scale(.6);
+
     opacity:.35;
+
   }
 
   35%{
+
     transform:scale(1.5);
+
     opacity:1;
+
   }
 
 }
@@ -362,6 +597,7 @@ button{
 ========================================================= */
 
 .composer{
+
   position:fixed;
 
   left:0;
@@ -378,9 +614,11 @@ button{
   background:rgba(255,255,255,.97);
 
   border-top:1px solid #ddd;
+
 }
 
 .composer-inner{
+
   width:min(760px,100%);
 
   margin:auto;
@@ -390,9 +628,11 @@ button{
   gap:8px;
 
   align-items:flex-end;
+
 }
 
 #input{
+
   flex:1;
 
   min-height:47px;
@@ -414,13 +654,17 @@ button{
   color:#222;
 
   line-height:1.5;
+
 }
 
 #input:focus{
+
   border-color:#999;
+
 }
 
 #send{
+
   width:64px;
 
   height:47px;
@@ -436,10 +680,13 @@ button{
   color:#fff;
 
   font-weight:600;
+
 }
 
 #send:disabled{
+
   opacity:.45;
+
 }
 
 
@@ -448,6 +695,7 @@ button{
 ========================================================= */
 
 #cropModal{
+
   display:none;
 
   position:fixed;
@@ -459,16 +707,21 @@ button{
   background:rgba(0,0,0,.75);
 
   align-items:center;
+
   justify-content:center;
 
   padding:14px;
+
 }
 
 #cropModal.show{
+
   display:flex;
+
 }
 
 .crop-box{
+
   width:min(720px,100%);
 
   background:#fff;
@@ -476,15 +729,19 @@ button{
   border-radius:18px;
 
   padding:15px;
+
 }
 
 .crop-title{
+
   margin:0 0 12px;
 
   font-size:18px;
+
 }
 
 .crop-stage{
+
   height:min(65dvh,540px);
 
   background:#111;
@@ -496,17 +753,23 @@ button{
   display:flex;
 
   align-items:center;
+
   justify-content:center;
+
 }
 
 #cropCanvas{
+
   max-width:100%;
+
   max-height:100%;
 
   touch-action:none;
+
 }
 
 .crop-buttons{
+
   display:flex;
 
   justify-content:flex-end;
@@ -514,24 +777,31 @@ button{
   gap:8px;
 
   margin-top:12px;
+
 }
 
 .crop-buttons button{
+
   border:0;
 
   border-radius:10px;
 
   padding:11px 14px;
+
 }
 
 .crop-cancel{
+
   background:#eee;
+
 }
 
 .crop-use{
+
   background:#222;
 
   color:#fff;
+
 }
 
 
@@ -542,12 +812,17 @@ button{
 @media(max-width:600px){
 
   .bubble{
+
     max-width:92%;
+
   }
 
   .body{
+
     padding-left:8px;
+
     padding-right:8px;
+
   }
 
 }
@@ -576,13 +851,17 @@ button{
     </div>
 
     <div class="subtitle">
+
       ${
         config.mode === "question"
           ? "質問"
           : "添削"
       }
+
       ・
+
       ${config.subjectName}
+
     </div>
 
   </div>
@@ -598,6 +877,7 @@ button{
 
   <div class="attach-inner">
 
+
     <div
       class="preview"
       id="preview"
@@ -607,6 +887,7 @@ button{
         id="previewImage"
         alt="添付画像"
       >
+
 
       <button
         class="remove"
@@ -629,6 +910,7 @@ button{
         写真を撮る
       </button>
 
+
       <button
         class="attach-button"
         id="select"
@@ -637,6 +919,7 @@ button{
         写真を選択
       </button>
 
+
       <input
         id="cameraInput"
         type="file"
@@ -644,6 +927,7 @@ button{
         capture="environment"
         hidden
       >
+
 
       <input
         id="fileInput"
@@ -700,6 +984,7 @@ button{
       placeholder="質問を入力…"
     ></textarea>
 
+
     <button
       id="send"
       type="button"
@@ -729,6 +1014,7 @@ button{
       写真を切り取る
     </h2>
 
+
     <div class="crop-stage">
 
       <canvas
@@ -736,6 +1022,7 @@ button{
       ></canvas>
 
     </div>
+
 
     <div class="crop-buttons">
 
@@ -746,6 +1033,7 @@ button{
       >
         キャンセル
       </button>
+
 
       <button
         class="crop-use"
@@ -819,13 +1107,26 @@ const cropCanvas =
 
 
 /* =========================================================
+   MathJax準備
+========================================================= */
+
+loadMathJax()
+  .catch(
+    error =>
+      console.error(
+        error
+      )
+  );
+
+
+/* =========================================================
    強制スクロール
 ========================================================= */
 
 function forceScrollBottom(){
 
   /*
-   * まず即時に一番下へ。
+   * 即時。
    */
 
   body.scrollTop =
@@ -833,61 +1134,125 @@ function forceScrollBottom(){
 
 
   /*
-   * scrollToでも指定。
+   * scrollTo。
    */
 
   body.scrollTo({
-    top:body.scrollHeight,
-    behavior:"smooth"
-  });
 
+    top:
+      body.scrollHeight,
 
-  /*
-   * ブラウザのレイアウト更新後。
-   */
-
-  requestAnimationFrame(() => {
-
-    body.scrollTop =
-      body.scrollHeight;
+    behavior:
+      "smooth"
 
   });
 
 
   /*
-   * 長い回答などで高さが変わった場合。
+   * レイアウト後。
    */
 
-  setTimeout(() => {
+  requestAnimationFrame(
+    () => {
 
-    body.scrollTop =
-      body.scrollHeight;
+      body.scrollTop =
+        body.scrollHeight;
 
-  },50);
-
-
-  setTimeout(() => {
-
-    body.scrollTop =
-      body.scrollHeight;
-
-  },150);
+    }
+  );
 
 
-  setTimeout(() => {
+  /*
+   * 高さ変更後。
+   */
 
-    body.scrollTop =
-      body.scrollHeight;
+  setTimeout(
+    () => {
 
-  },350);
+      body.scrollTop =
+        body.scrollHeight;
+
+    },
+    50
+  );
 
 
-  setTimeout(() => {
+  setTimeout(
+    () => {
 
-    body.scrollTop =
-      body.scrollHeight;
+      body.scrollTop =
+        body.scrollHeight;
 
-  },700);
+    },
+    150
+  );
+
+
+  setTimeout(
+    () => {
+
+      body.scrollTop =
+        body.scrollHeight;
+
+    },
+    350
+  );
+
+
+  setTimeout(
+    () => {
+
+      body.scrollTop =
+        body.scrollHeight;
+
+    },
+    700
+  );
+
+}
+
+
+/* =========================================================
+   MathJaxで数式を表示
+========================================================= */
+
+async function typesetMessage(
+  element
+){
+
+  if(!element){
+    return;
+  }
+
+
+  try{
+
+    await loadMathJax();
+
+
+    if(
+      window.MathJax &&
+      typeof
+        window.MathJax.typesetPromise ===
+          "function"
+    ){
+
+      await window.MathJax
+        .typesetPromise([
+          element
+        ]);
+
+    }
+
+  }
+  catch(error){
+
+    console.error(
+      "MathJax typeset error:",
+      error
+    );
+
+  }
 
 }
 
@@ -920,8 +1285,16 @@ function addMessage(
     "bubble";
 
 
+  /*
+   * HTMLとして実行しない。
+   *
+   * 数式だけMathJaxが処理する。
+   */
+
   bubble.textContent =
-    text;
+    String(
+      text ?? ""
+    );
 
 
   row.appendChild(
@@ -934,12 +1307,23 @@ function addMessage(
   );
 
 
+  forceScrollBottom();
+
+
   /*
-   * メッセージ追加直後に
-   * 強制的に下へ。
+   * MathJax変換。
    */
 
-  forceScrollBottom();
+  typesetMessage(
+    bubble
+  )
+  .then(
+    () => {
+
+      forceScrollBottom();
+
+    }
+  );
 
 
   return row;
@@ -1027,10 +1411,6 @@ function showThinking(){
     row
   );
 
-
-  /*
-   * ぽわぽわを表示した瞬間に下へ。
-   */
 
   forceScrollBottom();
 
@@ -1193,6 +1573,7 @@ function openCrop(){
   cropModal.classList.add(
     "show"
   );
+
 
   setupCrop();
 
@@ -1625,6 +2006,7 @@ document
 
 
     /*
+     * 写真を選択・切り取りしても、
      * 入力中の文章はそのまま。
      */
 
@@ -1746,11 +2128,12 @@ async function sendMessage(){
   ){
 
     return;
+
   }
 
 
   /*
-   * 生徒メッセージを追加。
+   * 生徒側表示。
    */
 
   let displayText =
@@ -1761,17 +2144,22 @@ async function sendMessage(){
 
     displayText =
       displayText
+
         ? displayText +
           "\n\n[写真を添付]"
+
         : "[写真を添付]";
 
   }
 
 
-  const userRow =
-    addUser(
-      displayText
-    );
+  /*
+   * 生徒メッセージ。
+   */
+
+  addUser(
+    displayText
+  );
 
 
   /*
@@ -1791,7 +2179,7 @@ async function sendMessage(){
 
 
   /*
-   * 送信後は入力欄を空にする。
+   * 入力欄だけ空にする。
    */
 
   input.value =
@@ -1807,14 +2195,14 @@ async function sendMessage(){
 
 
   /*
-   * 生徒メッセージを強制的に下へ。
+   * 最新位置へ。
    */
 
   forceScrollBottom();
 
 
   /*
-   * 待機表示。
+   * AI待機中。
    */
 
   const thinking =
@@ -1884,10 +2272,9 @@ async function sendMessage(){
      * AI回答。
      */
 
-    const aiRow =
-      addAI(
-        data.answer
-      );
+    addAI(
+      data.answer
+    );
 
 
     /*
@@ -1919,7 +2306,7 @@ async function sendMessage(){
 
 
     /*
-     * AIが判断した状態。
+     * 学習状態。
      */
 
     if(
@@ -1933,23 +2320,20 @@ async function sendMessage(){
 
 
     /*
-     * AI回答追加後も強制スクロール。
+     * MathJax変換後も
+     * 画面を一番下へ。
      */
 
     forceScrollBottom();
 
 
-    /*
-     * レイアウト確定後にも再度。
-     */
-
     setTimeout(
       () => {
 
         forceScrollBottom();
 
       },
-      100
+      150
     );
 
 
@@ -1959,7 +2343,7 @@ async function sendMessage(){
         forceScrollBottom();
 
       },
-      350
+      500
     );
 
 
@@ -1969,7 +2353,7 @@ async function sendMessage(){
         forceScrollBottom();
 
       },
-      700
+      900
     );
 
 
@@ -2028,7 +2412,7 @@ async function sendMessage(){
 
 
 /* =========================================================
-   ページを離れたらセッション破棄
+   PAGE HIDE
 ========================================================= */
 
 window.addEventListener(
