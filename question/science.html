@@ -8,26 +8,17 @@
 
 <body>
 
-<h1>AI学習チャット</h1>
-
-<div id="chat"></div>
-
-<textarea
-  id="input"
-  placeholder="質問を入力…"
-></textarea>
-
-<button id="send">
-送信
-</button>
+<div id="app"></div>
 
 <script>
-
-const MODE = "question";
-const SUBJECT = "science";
-const SUBJECT_NAME = "理科";
-
+window.AI_CONFIG = {
+  mode: "question",
+  subject: "science",
+  subjectName: "理科"
+};
 </script>
+
+<script src="/chat.js"></script>
 
 </body>
 </html>
