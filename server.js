@@ -6,54 +6,163 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const GROQ_API_KEY = process.env.GROQ_API_KEY || "";
 const MANUAL_MODEL = process.env.GROQ_MODEL || "";
+const APP_ACCESS_PASSWORD = process.env.APP_ACCESS_PASSWORD || "";
+const SESSION_TTL_MS = 8 * 60 * 60 * 1000;
+const sessions = new Map();
+const loginAttempts = new Map();
+const apiAttempts = new Map();
 
 app.disable("x-powered-by");
+app.set("trust proxy", 1);
 
 app.use((req, res, next) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-Frame-Options", "DENY");
   res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
   res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  res.setHeader("Cross-Origin-Resource-Policy", "same-origin");
+  res.setHeader("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data: https://cdn.jsdelivr.net; connect-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'");
+  res.setHeader("X-Permitted-Cross-Domain-Policies", "none");
+  if (process.env.NODE_ENV === "production") res.setHeader("Strict-Transport-Security", "max-age=15552000; includeSubDomains");
+  res.setHeader("Cache-Control", "no-store");
   next();
 });
 
-app.use(
-  express.json({
-    limit: "15mb"
-  })
+function rateLimit(store, max, windowMs, message) {
+  return (req, res, next) => {
+    const key = req.ip || req.socket.remoteAddress || "unknown";
+    const now = Date.now();
+    let entry = store.get(key);
+    if (!entry || now >= entry.resetAt) entry = { count: 0, resetAt: now + windowMs };
+    entry.count += 1;
+    store.set(key, entry);
+
+    if (store.size > 10_000) {
+      for (const [storedKey, value] of store) {
+        if (now >= value.resetAt) store.delete(storedKey);
+      }
+      while (store.size > 8_000) {
+        const oldestKey = store.keys().next().value;
+        if (oldestKey === undefined) break;
+        store.delete(oldestKey);
+      }
+    }
+
+    if (entry.count > max) {
+      res.setHeader("Retry-After", String(Math.max(1, Math.ceil((entry.resetAt - now) / 1000))));
+      return res.status(429).json({ error: message });
+    }
+    next();
+  };
+}
+
+const limitApiRequests = rateLimit(
+  apiAttempts, 20, 60_000,
+  "短時間に送信できる回数を超えました。1分ほど待ってから、もう一度試してください。"
 );
 
-// インスタンス内レート制限。メモリが増え続けないよう期限切れを整理する。
-const requestWindows = new Map();
-function limitApiRequests(req, res, next) {
-  const key = req.ip || req.socket.remoteAddress || "unknown";
-  const now = Date.now();
-  let window = requestWindows.get(key);
-
-  if (!window || now >= window.resetAt) {
-    window = { count: 0, resetAt: now + 60_000 };
+function readSession(req) {
+  const cookie = req.headers.cookie || "";
+  const match = cookie.match(/(?:^|;\s*)ai_session=([a-f0-9]{64})(?:;|$)/);
+  if (!match) return null;
+  const session = sessions.get(match[1]);
+  if (!session) return null;
+  if (Date.now() >= session.expiresAt) {
+    sessions.delete(match[1]);
+    return null;
   }
+  return { token: match[1], session };
+}
 
-  window.count += 1;
-  requestWindows.set(key, window);
-
-  if (window.count > 20) {
-    res.setHeader("Retry-After", String(Math.ceil((window.resetAt - now) / 1000)));
-    return res.status(429).json({
-      error: "短時間に送信できる回数を超えました。1分ほど待ってから、もう一度試してください。"
-    });
+function requireSession(req, res, next) {
+  const current = readSession(req);
+  if (!current) {
+    if (req.path.startsWith("/api/")) {
+      return res.status(401).json({ error: "ログインが必要です。ログイン画面から再度ログインしてください。" });
+    }
+    return res.redirect(302, "/login.html?next=" + encodeURIComponent(req.originalUrl || "/"));
   }
-
+  req.sessionToken = current.token;
   next();
 }
 
-const cleanupRateLimitTimer = setInterval(() => {
+const cleanupSecurityState = setInterval(() => {
   const now = Date.now();
-  for (const [key, window] of requestWindows) {
-    if (now >= window.resetAt) requestWindows.delete(key);
+  for (const [token, session] of sessions) if (now >= session.expiresAt) sessions.delete(token);
+  for (const store of [loginAttempts, apiAttempts]) {
+    for (const [key, entry] of store) if (now >= entry.resetAt) store.delete(key);
   }
 }, 60_000);
-cleanupRateLimitTimer.unref();
+cleanupSecurityState.unref();
+
+// ログインページとログインAPIだけを認証前に公開する。
+app.get("/login.html", (req, res) => {
+  res.sendFile(require("path").join(__dirname, "login.html"));
+});
+
+app.post(
+  "/api/auth/login",
+  rateLimit(loginAttempts, 5, 15 * 60_000, "ログイン試行回数が上限に達しました。15分ほど待ってから再試行してください。"),
+  express.json({ limit: "2kb" }),
+  (req, res) => {
+    if (APP_ACCESS_PASSWORD.length < 16 || APP_ACCESS_PASSWORD.length > 256) {
+      return res.status(503).json({ error: "Renderの環境変数 APP_ACCESS_PASSWORD に16〜256文字の強固なパスワードを設定してください。" });
+    }
+
+    const supplied = typeof req.body?.password === "string" && req.body.password.length <= 256 ? req.body.password : "";
+    const expectedBuffer = Buffer.from(APP_ACCESS_PASSWORD, "utf8");
+    const suppliedBuffer = Buffer.from(supplied, "utf8");
+    const valid = suppliedBuffer.length === expectedBuffer.length &&
+      crypto.timingSafeEqual(suppliedBuffer, expectedBuffer);
+
+    if (!valid) return res.status(401).json({ error: "パスワードが正しくありません。" });
+
+    loginAttempts.delete(req.ip || req.socket.remoteAddress || "unknown");
+    if (sessions.size >= 2_000) {
+      const now = Date.now();
+      for (const [oldToken, session] of sessions) {
+        if (now >= session.expiresAt) sessions.delete(oldToken);
+      }
+      if (sessions.size >= 2_000) {
+        return res.status(503).json({ error: "現在ログイン数が上限に達しています。時間をおいて再試行してください。" });
+      }
+    }
+
+    const token = crypto.randomBytes(32).toString("hex");
+    sessions.set(token, { createdAt: Date.now(), expiresAt: Date.now() + SESSION_TTL_MS });
+    const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
+    res.setHeader("Set-Cookie", "ai_session=" + token + "; HttpOnly; SameSite=Strict; Path=/; Max-Age=" + Math.floor(SESSION_TTL_MS / 1000) + secure);
+    res.json({ ok: true });
+  }
+);
+
+app.get("/api/auth/status", (req, res) => {
+  res.json({ authenticated: Boolean(readSession(req)), configured: Boolean(APP_ACCESS_PASSWORD) });
+});
+
+// ここから下はログイン済みユーザーだけが利用できる。
+app.use(requireSession);
+
+// Cookie認証を使う状態変更APIは同一オリジンからの要求だけを受け付ける。
+app.use((req, res, next) => {
+  if (req.method !== "GET" && req.method !== "HEAD" && req.path.startsWith("/api/")) {
+    const origin = req.get("origin");
+    const expectedOrigin = req.protocol + "://" + req.get("host");
+    if (origin && origin !== expectedOrigin) {
+      return res.status(403).json({ error: "許可されていない送信元です。" });
+    }
+  }
+  next();
+});
+
+app.use("/api", limitApiRequests);
+app.use(express.json({ limit: "15mb" }));
+
+app.post("/api/auth/logout", (req, res) => {
+  if (req.sessionToken) sessions.delete(req.sessionToken);
+  res.setHeader("Set-Cookie", "ai_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0" + (process.env.NODE_ENV === "production" ? "; Secure" : ""));
+  res.json({ ok: true });
+});
 
 
 /* =========================================================
@@ -1753,7 +1862,6 @@ async function requestGroq(
 
 app.post(
   "/api/chat",
-  limitApiRequests,
   async (
     req,
     res
@@ -2429,7 +2537,6 @@ app.post(
 
 app.get(
   "/api/models",
-  limitApiRequests,
   async (
     req,
     res
