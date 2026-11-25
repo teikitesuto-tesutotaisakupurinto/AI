@@ -2228,6 +2228,7 @@ async function sendMessage(){
             "Content-Type": "application/json"
           },
           signal: controller.signal,
+          credentials: "same-origin",
           body: JSON.stringify({
             mode: config.mode,
             subject: config.subject,
@@ -2237,6 +2238,11 @@ async function sendMessage(){
           })
         }
       );
+
+      if (response.status === 401) {
+        location.replace("/login.html?next=" + encodeURIComponent(location.pathname));
+        throw new Error("ログインの有効期限が切れました。再度ログインしてください。");
+      }
 
       const responseText = await response.text();
 
