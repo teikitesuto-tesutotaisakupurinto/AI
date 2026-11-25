@@ -2133,8 +2133,10 @@ async function sendMessage(){
 
 
   /*
-   * 生徒側表示。
+   * 送信内容を保持し、失敗時に入力欄へ戻せるようにする。
    */
+
+  const sentImage = imageData;
 
   let displayText =
     text;
@@ -2157,7 +2159,7 @@ async function sendMessage(){
    * 生徒メッセージ。
    */
 
-  addUser(
+  const userRow = addUser(
     displayText
   );
 
@@ -2211,44 +2213,41 @@ async function sendMessage(){
 
   try{
 
-    const response =
-      await fetch(
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 60_000);
+
+    let response;
+    let data;
+
+    try {
+      response = await fetch(
         "/api/chat",
         {
-
-          method:
-            "POST",
-
-          headers:{
-
-            "Content-Type":
-              "application/json"
-
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
           },
-
-          body:
-            JSON.stringify({
-
-              mode:
-                config.mode,
-
-              subject:
-                config.subject,
-
-              learningState,
-
-              messages,
-
-              imageData
-
-            })
-
+          signal: controller.signal,
+          body: JSON.stringify({
+            mode: config.mode,
+            subject: config.subject,
+            learningState,
+            messages,
+            imageData: sentImage
+          })
         }
       );
 
+      const responseText = await response.text();
 
-    const data =
-      await response.json();
+      try {
+        data = JSON.parse(responseText);
+      } catch {
+        throw new Error("サーバーから正しい応答を受け取れませんでした。");
+      }
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
 
     if(!response.ok){
@@ -2366,31 +2365,19 @@ async function sendMessage(){
   }
   catch(error){
 
-    /*
-     * ぽわぽわ削除。
-     */
-
     thinking.remove();
 
+    // 失敗した送信は履歴から外し、入力内容を復元する。
+    messages.pop();
+    userRow.remove();
+    input.value = text;
 
-    /*
-     * エラー。
-     */
+    const errorMessage =
+      error.name === "AbortError"
+        ? "回答に時間がかかっています。通信状況を確認して、もう一度送信してください。"
+        : "送信に失敗しました。入力内容と添付画像は残してあります。時間をおいて、もう一度試してください。";
 
-    addAI(
-      "AIとの接続でエラーが発生しました。"
-    );
-
-
-    addAI(
-      "エラー詳細：\n" +
-      (
-        error.message ||
-        "不明なエラー"
-      )
-    );
-
-
+    addAI(errorMessage);
     forceScrollBottom();
 
   }
