@@ -7,11 +7,53 @@ const PORT = process.env.PORT || 3000;
 const GROQ_API_KEY = process.env.GROQ_API_KEY || "";
 const MANUAL_MODEL = process.env.GROQ_MODEL || "";
 
+app.disable("x-powered-by");
+
+app.use((req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  next();
+});
+
 app.use(
   express.json({
     limit: "15mb"
   })
 );
+
+// インスタンス内レート制限。メモリが増え続けないよう期限切れを整理する。
+const requestWindows = new Map();
+function limitApiRequests(req, res, next) {
+  const key = req.ip || req.socket.remoteAddress || "unknown";
+  const now = Date.now();
+  let window = requestWindows.get(key);
+
+  if (!window || now >= window.resetAt) {
+    window = { count: 0, resetAt: now + 60_000 };
+  }
+
+  window.count += 1;
+  requestWindows.set(key, window);
+
+  if (window.count > 20) {
+    res.setHeader("Retry-After", String(Math.ceil((window.resetAt - now) / 1000)));
+    return res.status(429).json({
+      error: "短時間に送信できる回数を超えました。1分ほど待ってから、もう一度試してください。"
+    });
+  }
+
+  next();
+}
+
+const cleanupRateLimitTimer = setInterval(() => {
+  const now = Date.now();
+  for (const [key, window] of requestWindows) {
+    if (now >= window.resetAt) requestWindows.delete(key);
+  }
+}, 60_000);
+cleanupRateLimitTimer.unref();
 
 
 /* =========================================================
@@ -1206,6 +1248,7 @@ async function getGroqModels() {
     await fetch(
       "https://api.groq.com/openai/v1/models",
       {
+        signal: AbortSignal.timeout(20_000),
 
         headers: {
 
@@ -1527,6 +1570,7 @@ async function requestGroq(
     await fetch(
       "https://api.groq.com/openai/v1/chat/completions",
       {
+        signal: AbortSignal.timeout(45_000),
 
         method:
           "POST",
@@ -1595,6 +1639,7 @@ async function requestGroq(
         await fetch(
           "https://api.groq.com/openai/v1/chat/completions",
           {
+            signal: AbortSignal.timeout(45_000),
 
             method:
               "POST",
@@ -1708,6 +1753,7 @@ async function requestGroq(
 
 app.post(
   "/api/chat",
+  limitApiRequests,
   async (
     req,
     res
@@ -1764,6 +1810,36 @@ app.post(
       const imageData =
         req.body?.imageData;
 
+      if (messages.length > 30) {
+        return res.status(400).json({
+          error: "会話が長くなっています。新しいチャットで続けてください。"
+        });
+      }
+
+      if (messages.some(message =>
+        !message ||
+        !["user", "assistant"].includes(message.role) ||
+        typeof message.content !== "string" ||
+        message.content.length > 5000
+      )) {
+        return res.status(400).json({
+          error: "送信内容を確認してください。"
+        });
+      }
+
+      if (
+        imageData !== undefined &&
+        imageData !== null &&
+        (
+          typeof imageData !== "string" ||
+          !/^data:image\/(png|jpeg|jpg|webp);base64,/i.test(imageData) ||
+          imageData.length > 10_500_000
+        )
+      ) {
+        return res.status(400).json({
+          error: "画像の形式またはサイズが対応範囲外です。画像を小さくして再送信してください。"
+        });
+      }
 
       const modeName =
         MODES[mode];
@@ -2353,6 +2429,7 @@ app.post(
 
 app.get(
   "/api/models",
+  limitApiRequests,
   async (
     req,
     res
@@ -2433,11 +2510,22 @@ app.get(
    静的ファイル
 ========================================================= */
 
-app.use(
-  express.static(
-    __dirname
-  )
-);
+// サーバー実装・依存関係情報・環境設定はブラウザーへ配信しない。
+app.get(["/server.js", "/package.json", "/package-lock.json", "/.env"], (req, res) => {
+  res.status(404).type("text").send("Not Found");
+});
+
+app.use(express.static(__dirname, {
+  index: "index.html",
+  dotfiles: "deny",
+  etag: true,
+  maxAge: "1h",
+  setHeaders(res, filePath) {
+    if (filePath.endsWith(".html")) {
+      res.setHeader("Cache-Control", "no-cache");
+    }
+  }
+}));
 
 
 /* =========================================================
